@@ -10,6 +10,14 @@ The first tool is a public launch-surface scanner for sites you own or have perm
 - Source-map exposure hints
 - Public build variable clues
 
+Need the full launch workflow? The $25 AI Agent Launch Pack includes the local app, safe-intake builder, checklist, templates, sample report, and optional fixed-scope 24-hour review path:
+
+https://ai-launch-risk-check-public.vercel.app/
+
+If the scope fits, the digital pack checkout starts here:
+
+https://ai-launch-risk-check-public.vercel.app/checkout-after-scope.html#digital-pack
+
 ## Use
 
 Run directly from GitHub:
