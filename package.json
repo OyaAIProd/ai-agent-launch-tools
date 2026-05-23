@@ -1,6 +1,6 @@
 {
   "name": "ai-agent-launch-tools",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "Dependency-free launch hygiene tools for AI agent and MCP builders.",
   "type": "module",
   "private": false,
@@ -10,6 +10,7 @@
   "files": [
     "README.md",
     "LICENSE",
+    "checklists/",
     "scripts/",
     "examples/"
   ],
