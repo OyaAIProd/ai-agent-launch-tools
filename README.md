@@ -48,11 +48,13 @@ The scanner blocks localhost, private, reserved, and non-standard-port targets. 
 
 These no-login tools are live:
 
+- Launch readiness report: https://ai-launch-risk-check-public.vercel.app/launch-readiness-report.html
 - Public surface scan: https://ai-launch-risk-check-public.vercel.app/public-surface-scan.html
 - MCP fixture generator: https://ai-launch-risk-check-public.vercel.app/mcp-fixture-generator.html
 - MCP prompt-injection eval guide: https://ai-launch-risk-check-public.vercel.app/mcp-prompt-injection-eval.html
 - MCP prompt-injection fixture library: https://ai-launch-risk-check-public.vercel.app/mcp-prompt-injection-fixtures.html
 - Agent tool permission matrix: https://ai-launch-risk-check-public.vercel.app/agent-tool-permission-matrix.html
+- Agent API key bootstrap checklist: https://ai-launch-risk-check-public.vercel.app/agent-api-key-bootstrap-checklist.html
 
 The full paid pack and fixed-scope review are described on the product page:
 
