@@ -42,6 +42,12 @@ JSON output:
 npx github:kayalopez/ai-agent-launch-tools https://example.com --json
 ```
 
+Markdown report:
+
+```bash
+npx github:kayalopez/ai-agent-launch-tools https://example.com --markdown
+```
+
 The scanner blocks localhost, private, reserved, and non-standard-port targets. It is for public launch hygiene only, not penetration testing, vulnerability scanning, legal advice, compliance certification, or a security guarantee.
 
 ## Free Browser Tools

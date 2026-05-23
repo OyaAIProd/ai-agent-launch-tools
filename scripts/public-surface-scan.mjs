@@ -6,7 +6,7 @@ const STANDARD_PORTS = new Set(["", "80", "443"]);
 
 function usage() {
   return [
-    "Usage: node scripts/public-surface-scan.mjs <https-url> [--json]",
+    "Usage: node scripts/public-surface-scan.mjs <https-url> [--json|--markdown]",
     "",
     "Scans only public http(s) URLs you own or have permission to test.",
   ].join("\n");
@@ -175,19 +175,62 @@ function printText(result) {
   }
 }
 
+function printMarkdown(result) {
+  console.log(`# Public Launch Surface Scan`);
+  console.log("");
+  console.log(`- Target: ${result.target}`);
+  console.log(`- Final URL: ${result.finalUrl}`);
+  console.log(`- HTTP status: ${result.status}`);
+  console.log(`- Score: ${result.score}/100`);
+  console.log("");
+
+  if (!result.findings.length) {
+    console.log("## Findings");
+    console.log("");
+    console.log("No launch-surface findings were detected by this lightweight check.");
+    console.log("");
+  } else {
+    console.log("## Findings");
+    console.log("");
+    for (const finding of result.findings) {
+      console.log(`- **${finding.severity}**: ${finding.message}`);
+    }
+    console.log("");
+  }
+
+  console.log("## Scope");
+  console.log("");
+  console.log(
+    "This is a lightweight public launch hygiene scan. It is not penetration testing, compliance certification, legal advice, or a security guarantee."
+  );
+  console.log("");
+  console.log("## Next Checks");
+  console.log("");
+  console.log("- Confirm the scanned URL is owned by you or explicitly approved for testing.");
+  console.log("- Review data exposure, tool permissions, logging, rollback, and human approval boundaries before launch.");
+  console.log("- Do not paste secrets, customer data, private endpoints, cookies, or payment details into public tools.");
+}
+
 async function main() {
   const args = process.argv.slice(2);
   const json = args.includes("--json");
-  const target = args.find((arg) => arg !== "--json");
+  const markdown = args.includes("--markdown");
+  const target = args.find((arg) => !["--json", "--markdown"].includes(arg));
 
   if (!target || args.includes("--help") || args.includes("-h")) {
     console.log(usage());
     return target ? 0 : 1;
   }
 
+  if (json && markdown) {
+    console.error("Error: use either --json or --markdown, not both.");
+    return 1;
+  }
+
   try {
     const result = await scan(target);
     if (json) console.log(JSON.stringify(result, null, 2));
+    else if (markdown) printMarkdown(result);
     else printText(result);
     return 0;
   } catch (error) {
