@@ -12,6 +12,14 @@ The first tool is a public launch-surface scanner for sites you own or have perm
 
 ## Use
 
+Run directly from GitHub:
+
+```bash
+npx github:kayalopez/ai-agent-launch-tools https://example.com
+```
+
+Or after cloning:
+
 ```bash
 node scripts/public-surface-scan.mjs https://example.com
 ```
@@ -19,7 +27,7 @@ node scripts/public-surface-scan.mjs https://example.com
 JSON output:
 
 ```bash
-node scripts/public-surface-scan.mjs https://example.com --json
+npx github:kayalopez/ai-agent-launch-tools https://example.com --json
 ```
 
 The scanner blocks localhost, private, reserved, and non-standard-port targets. It is for public launch hygiene only, not penetration testing, vulnerability scanning, legal advice, compliance certification, or a security guarantee.
@@ -40,4 +48,3 @@ https://ai-launch-risk-check-public.vercel.app/
 ## Safe Use
 
 Only scan public URLs you own or have permission to assess. Do not paste secrets, tokens, private customer data, cookies, payment pages, internal hosts, or non-public endpoints into this tool.
-
