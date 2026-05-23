@@ -7,10 +7,15 @@
   "bin": {
     "public-surface-scan": "./scripts/public-surface-scan.mjs"
   },
+  "files": [
+    "README.md",
+    "LICENSE",
+    "scripts/",
+    "examples/"
+  ],
   "scripts": {
     "scan": "node scripts/public-surface-scan.mjs",
     "check": "node --check scripts/public-surface-scan.mjs"
   },
   "license": "MIT"
 }
-
