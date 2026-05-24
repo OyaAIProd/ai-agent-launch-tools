@@ -175,6 +175,39 @@ const SECRET_PATTERNS = [
   /\b(?:\d[ -]*?){13,19}\b/,
 ];
 
+const METADATA_INJECTION_PATTERNS = [
+  {
+    code: "instruction_override",
+    severity: "high",
+    terms: ["ignore previous", "ignore all previous", "developer message", "system prompt", "override instructions"],
+    reason: "Tool metadata appears to contain instruction-override language.",
+  },
+  {
+    code: "secret_exfiltration_pressure",
+    severity: "high",
+    terms: ["reveal secret", "exfiltrate", "ssh key", "id_rsa", "private key", "api key", "access token"],
+    reason: "Tool metadata appears to pressure the agent toward secret access or exfiltration.",
+  },
+  {
+    code: "concealment_instruction",
+    severity: "high",
+    terms: ["do not tell", "do not mention", "without telling", "silently", "hide this"],
+    reason: "Tool metadata appears to tell the agent to conceal behavior from the user.",
+  },
+  {
+    code: "tool_selection_bias",
+    severity: "medium",
+    terms: ["deprecated", "recommended version", "prefer this tool", "migrate to this", "supersedes", "legacy tool", "always use this"],
+    reason: "Tool metadata appears to bias tool selection through credibility or replacement claims.",
+  },
+  {
+    code: "network_or_file_exfil_hint",
+    severity: "medium",
+    terms: ["send to http", "send to https", "webhook", "callback url", "upload the file", "read the file first"],
+    reason: "Tool metadata appears to hint at network or file-transfer behavior that needs review.",
+  },
+];
+
 function usage() {
   return [
     "Usage: mcp-permission-matrix [options]",
@@ -252,15 +285,51 @@ function extractTools(parsed) {
   throw new Error("Could not find a tools array. Expected { tools: [...] }, { result: { tools: [...] } }, or an array.");
 }
 
-function stringifySchemaKeys(schema) {
-  const keys = [];
-  const properties = schema?.properties && typeof schema.properties === "object" ? schema.properties : {};
-  for (const [key, value] of Object.entries(properties)) {
-    keys.push(key);
-    if (typeof value?.description === "string") keys.push(value.description);
-    if (Array.isArray(value?.enum)) keys.push(value.enum.join(" "));
+function collectStringFields(value, path = "$", output = []) {
+  if (typeof value === "string") {
+    output.push({ path, value });
+    return output;
   }
-  return keys.join(" ");
+  if (Array.isArray(value)) {
+    value.forEach((item, index) => collectStringFields(item, `${path}[${index}]`, output));
+    return output;
+  }
+  if (value && typeof value === "object") {
+    for (const [key, child] of Object.entries(value)) {
+      collectStringFields(child, `${path}.${key}`, output);
+    }
+  }
+  return output;
+}
+
+function stringifySchemaKeys(schema) {
+  return collectStringFields(schema ?? {}, "inputSchema").map((item) => item.value).join(" ");
+}
+
+function findMetadataInjectionFindings(tool) {
+  const fields = [
+    { path: "name", value: typeof tool?.name === "string" ? tool.name : "" },
+    { path: "description", value: typeof tool?.description === "string" ? tool.description : "" },
+    ...collectStringFields(tool?.inputSchema ?? tool?.input_schema ?? {}, "inputSchema"),
+  ].filter((item) => item.value.trim());
+
+  const findings = [];
+  for (const field of fields) {
+    const lower = field.value.toLowerCase();
+    for (const pattern of METADATA_INJECTION_PATTERNS) {
+      const matched = pattern.terms.find((term) => lower.includes(term));
+      if (matched) {
+        findings.push({
+          path: field.path,
+          severity: pattern.severity,
+          code: pattern.code,
+          matched,
+          reason: pattern.reason,
+        });
+      }
+    }
+  }
+  return findings;
 }
 
 function normalizeTool(tool, index) {
@@ -268,6 +337,7 @@ function normalizeTool(tool, index) {
   const description = typeof tool?.description === "string" ? tool.description.trim() : "";
   const annotations = tool?.annotations && typeof tool.annotations === "object" ? tool.annotations : {};
   const schemaText = stringifySchemaKeys(tool?.inputSchema ?? tool?.input_schema ?? {});
+  const metadataInjectionFindings = findMetadataInjectionFindings(tool);
   const metaText = [
     tool?._meta?.tool_configuration?.require_approval,
     tool?._meta?.tool_configuration?.server_label,
@@ -285,6 +355,7 @@ function normalizeTool(tool, index) {
       toolConfiguration: tool?._meta?.tool_configuration ?? null,
     }),
     searchable: `${name} ${description} ${schemaText} ${metaText}`.toLowerCase(),
+    metadataInjectionFindings,
   };
 }
 
@@ -302,11 +373,11 @@ function hasPromptInjectionSignal(text) {
 }
 
 function classify(normalized) {
-  if (hasPromptInjectionSignal(normalized.searchable)) {
+  if (normalized.metadataInjectionFindings.length || hasPromptInjectionSignal(normalized.searchable)) {
     return {
       actionClass: "metadata_injection_signal",
       gate: "deny",
-      reason: "Tool metadata contains instruction-like or exfiltration language.",
+      reason: "Tool name, description, or inputSchema contains instruction-like, tool-selection-bias, or exfiltration language.",
     };
   }
 
@@ -347,6 +418,7 @@ function buildMatrix({ tools, server }) {
       defaultGate: classification.gate,
       reason: classification.reason,
       evidence: GATES[classification.gate].evidence,
+      metadataInjectionFindings: normalized.metadataInjectionFindings,
     };
   });
 
@@ -370,6 +442,7 @@ function buildMatrix({ tools, server }) {
       })),
     }),
     totals,
+    metadataInjectionFindingCount: rows.reduce((total, row) => total + row.metadataInjectionFindings.length, 0),
     rows,
     launchRule: "New or changed MCP tools should default to ask or deny until their action class, data boundary, approval UI, receipt, and rollback path are reviewed.",
     safety: "Do not include secrets, customer records, private screenshots, payment data, OAuth tokens, cookies, API keys, card, bank, tax, payout, or full transaction identifiers in tools/list examples or reports.",
@@ -512,12 +585,27 @@ function printMarkdown(matrix) {
   console.log(`- Tools reviewed: ${matrix.toolCount}`);
   console.log(`- Default gates: allow ${matrix.totals.allow}, ask ${matrix.totals.ask}, deny ${matrix.totals.deny}`);
   console.log(`- Snapshot digest: ${matrix.snapshotDigest}`);
+  console.log(`- Metadata/schema injection findings: ${matrix.metadataInjectionFindingCount}`);
   console.log(`- Generated by: ${matrix.generatedBy}`);
   console.log("");
   console.log("| Tool | Policy key | Digest | Action class | Default gate | Reason | Evidence to keep |");
   console.log("| --- | --- | --- | --- | --- | --- | --- |");
   for (const row of matrix.rows) {
     console.log(`| ${escapeCell(row.tool)} | ${escapeCell(row.policyKey)} | ${escapeCell(row.metadataDigest)} | ${escapeCell(row.actionClass)} | ${escapeCell(row.defaultGate)} | ${escapeCell(row.reason)} | ${escapeCell(row.evidence)} |`);
+  }
+  if (matrix.metadataInjectionFindingCount) {
+    console.log("");
+    console.log("## Metadata And Schema Injection Findings");
+    console.log("");
+    console.log("These findings scan tool names, tool descriptions, and every string inside `inputSchema`, including nested parameter descriptions, titles, defaults, and enum values.");
+    console.log("");
+    console.log("| Tool | Path | Severity | Code | Matched term | Review note |");
+    console.log("| --- | --- | --- | --- | --- | --- |");
+    for (const row of matrix.rows) {
+      for (const finding of row.metadataInjectionFindings) {
+        console.log(`| ${escapeCell(row.tool)} | ${escapeCell(finding.path)} | ${escapeCell(finding.severity)} | ${escapeCell(finding.code)} | ${escapeCell(finding.matched)} | ${escapeCell(finding.reason)} |`);
+      }
+    }
   }
   if (matrix.baselineComparison) {
     console.log("");
