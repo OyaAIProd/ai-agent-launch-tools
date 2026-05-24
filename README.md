@@ -44,6 +44,18 @@ https://ai-launch-risk-check-public.vercel.app/checkout-after-scope.html#digital
 
 ## Use
 
+Run the MCP trust verification planner:
+
+```bash
+npx github:kayalopez/ai-agent-launch-tools mcp-trust-check --server "candidate MCP server" --workflow "one AI workflow that can read docs and call approved tools"
+```
+
+JSON output:
+
+```bash
+npx github:kayalopez/ai-agent-launch-tools mcp-trust-check --server "candidate MCP server" --json
+```
+
 Run directly from GitHub:
 
 ```bash
@@ -69,6 +81,8 @@ npx github:kayalopez/ai-agent-launch-tools https://example.com --markdown
 ```
 
 The scanner blocks localhost, private, reserved, and non-standard-port targets. It is for public launch hygiene only, not penetration testing, vulnerability scanning, legal advice, compliance certification, or a security guarantee.
+
+The MCP trust planner blocks obvious secret-like inputs and prints a non-sensitive launch checklist. It is for review planning only, not approval automation or a guarantee that a server is safe.
 
 ## Free Browser Tools
 

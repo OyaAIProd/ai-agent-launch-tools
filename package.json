@@ -1,11 +1,12 @@
 {
   "name": "ai-agent-launch-tools",
-  "version": "0.1.2",
+  "version": "0.1.3",
   "description": "Dependency-free launch hygiene tools for AI agent and MCP builders.",
   "type": "module",
   "private": false,
   "bin": {
-    "public-surface-scan": "./scripts/public-surface-scan.mjs"
+    "public-surface-scan": "./scripts/public-surface-scan.mjs",
+    "mcp-trust-check": "./scripts/mcp-trust-check.mjs"
   },
   "files": [
     "README.md",
@@ -16,7 +17,7 @@
   ],
   "scripts": {
     "scan": "node scripts/public-surface-scan.mjs",
-    "check": "node --check scripts/public-surface-scan.mjs"
+    "check": "node --check scripts/public-surface-scan.mjs && node --check scripts/mcp-trust-check.mjs"
   },
   "license": "MIT"
 }
