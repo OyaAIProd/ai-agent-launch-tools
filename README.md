@@ -161,6 +161,7 @@ These no-login tools are live:
 - MCP fixture generator: https://ai-launch-risk-check-public.vercel.app/mcp-fixture-generator.html
 - MCP prompt-injection eval guide: https://ai-launch-risk-check-public.vercel.app/mcp-prompt-injection-eval.html
 - MCP prompt-injection fixture library: https://ai-launch-risk-check-public.vercel.app/mcp-prompt-injection-fixtures.html
+- MCP tools/list health report: https://ai-launch-risk-check-public.vercel.app/mcp-tools-list-health-report.html
 - Agent tool permission matrix: https://ai-launch-risk-check-public.vercel.app/agent-tool-permission-matrix.html
 - MCP first-invoke approval checklist: https://ai-launch-risk-check-public.vercel.app/mcp-first-invoke-approval-checklist.html
 - MCP tool approval criteria generator: https://ai-launch-risk-check-public.vercel.app/mcp-tool-approval-criteria.html
