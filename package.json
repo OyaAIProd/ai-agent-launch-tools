@@ -1,6 +1,6 @@
 {
   "name": "ai-agent-launch-tools",
-  "version": "0.1.13",
+  "version": "0.1.15",
   "description": "Dependency-free launch hygiene tools for AI agent and MCP builders.",
   "type": "module",
   "private": false,
@@ -19,7 +19,7 @@
   ],
   "scripts": {
     "scan": "node scripts/public-surface-scan.mjs",
-    "check": "node --check scripts/public-surface-scan.mjs && node --check scripts/mcp-trust-check.mjs && node --check scripts/mcp-permission-matrix.mjs && node --check scripts/mcp-config-risk.mjs && node scripts/mcp-permission-matrix.mjs --file examples/mcp-tools-list-schema-injection-example.json --json >/dev/null && node scripts/mcp-permission-matrix.mjs --file examples/mcp-tools-list-schema-quality-example.json --json >/dev/null && node scripts/mcp-permission-matrix.mjs --file examples/mcp-tools-list-schema-ref-example.json --json >/dev/null && node scripts/mcp-permission-matrix.mjs --file examples/mcp-tools-list-schema-conformance-example.json --json >/dev/null && node scripts/mcp-permission-matrix.mjs --file examples/mcp-tools-list-annotations-example.json --json >/dev/null"
+    "check": "node --check scripts/public-surface-scan.mjs && node --check scripts/mcp-trust-check.mjs && node --check scripts/mcp-permission-matrix.mjs && node --check scripts/mcp-config-risk.mjs && node scripts/mcp-permission-matrix.mjs --file examples/mcp-tools-list-schema-injection-example.json --json >/dev/null && node scripts/mcp-permission-matrix.mjs --file examples/mcp-tools-list-schema-quality-example.json --json >/dev/null && node scripts/mcp-permission-matrix.mjs --file examples/mcp-tools-list-schema-ref-example.json --json >/dev/null && node scripts/mcp-permission-matrix.mjs --file examples/mcp-tools-list-schema-conformance-example.json --json >/dev/null && node scripts/mcp-permission-matrix.mjs --file examples/mcp-tools-list-annotations-example.json --json >/dev/null && node scripts/mcp-permission-matrix.mjs --file examples/mcp-tools-list-output-schema-example.json --json >/dev/null"
   },
   "license": "MIT"
 }

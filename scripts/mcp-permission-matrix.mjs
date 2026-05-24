@@ -212,6 +212,10 @@ function schemaFinding(path, severity, code, reason) {
   return { path, severity, code, reason };
 }
 
+function outputSchemaFinding(path, severity, code, reason) {
+  return { path, severity, code, reason };
+}
+
 function usage() {
   return [
     "Usage: mcp-permission-matrix [options]",
@@ -327,6 +331,10 @@ function stringifySchemaKeys(schema) {
   return collectStringFields(schema ?? {}, "inputSchema").map((item) => item.value).join(" ");
 }
 
+function hasOwn(value, key) {
+  return Boolean(value && Object.prototype.hasOwnProperty.call(value, key));
+}
+
 function findMetadataInjectionFindings(tool) {
   const fields = [
     { path: "name", value: typeof tool?.name === "string" ? tool.name : "" },
@@ -354,8 +362,8 @@ function findMetadataInjectionFindings(tool) {
 }
 
 function findSchemaReviewFindings(tool) {
-  const hasInputSchema = tool && Object.prototype.hasOwnProperty.call(tool, "inputSchema");
-  const hasSnakeInputSchema = tool && Object.prototype.hasOwnProperty.call(tool, "input_schema");
+  const hasInputSchema = hasOwn(tool, "inputSchema");
+  const hasSnakeInputSchema = hasOwn(tool, "input_schema");
   if (!hasInputSchema && !hasSnakeInputSchema) {
     return [
       schemaFinding(
@@ -422,9 +430,9 @@ function findSchemaReviewFindings(tool) {
     findings.push(
       schemaFinding(
         `${path}.required`,
-        "low",
+        "medium",
         "properties_without_required_array",
-        "Input schema has properties but no required array. Confirm every parameter is intentionally optional."
+        "Input schema has properties but no required array. Clients may treat every argument as optional and send empty tool-call arguments; confirm required parameters are declared explicitly."
       )
     );
   }
@@ -457,6 +465,144 @@ function findSchemaReviewFindings(tool) {
           "low",
           "property_without_description",
           "Input parameter is missing a description, which can make client-side review and LLM argument generation less reliable."
+        )
+      );
+    }
+  }
+  return findings;
+}
+
+function looksLikeStructuredOutputTool(normalized, classification) {
+  const structuredTerms = [
+    "data",
+    "dataset",
+    "evaluate",
+    "export",
+    "get",
+    "json",
+    "list",
+    "metric",
+    "metrics",
+    "report",
+    "result",
+    "schema",
+    "search",
+    "stat",
+    "statistics",
+    "stats",
+    "status",
+    "summary",
+  ];
+  return (
+    classification.actionClass === "read_public" ||
+    classification.actionClass === "read_private" ||
+    structuredTerms.some((term) => normalized.searchable.includes(term))
+  );
+}
+
+function findOutputSchemaReviewFindings(tool, normalized, classification) {
+  const hasOutputSchema = hasOwn(tool, "outputSchema");
+  const hasSnakeOutputSchema = hasOwn(tool, "output_schema");
+  if (!hasOutputSchema && !hasSnakeOutputSchema) {
+    if (!looksLikeStructuredOutputTool(normalized, classification)) return [];
+    return [
+      outputSchemaFinding(
+        "outputSchema",
+        "low",
+        "missing_output_schema_for_structured_tool",
+        "Tool appears likely to return structured data, but tools/list does not declare outputSchema. Clients cannot validate structuredContent or know the result shape before calling."
+      ),
+    ];
+  }
+
+  const path = hasOutputSchema ? "outputSchema" : "output_schema";
+  const schema = hasOutputSchema ? tool.outputSchema : tool.output_schema;
+  if (!schema || typeof schema !== "object" || Array.isArray(schema)) {
+    return [
+      outputSchemaFinding(
+        path,
+        "medium",
+        "invalid_output_schema_shape",
+        "Tool outputSchema is not an object. Verify the server is emitting JSON Schema-compatible structured-output metadata."
+      ),
+    ];
+  }
+  if (Object.keys(schema).length === 0) {
+    return [
+      outputSchemaFinding(
+        path,
+        "medium",
+        "empty_output_schema",
+        "Tool outputSchema is an empty object. This gives clients no useful contract for validating structuredContent."
+      ),
+    ];
+  }
+
+  const findings = [];
+  for (const ref of collectJsonRefs(schema, path)) {
+    const local = ref.value.startsWith("#/");
+    findings.push(
+      outputSchemaFinding(
+        ref.path,
+        local ? "medium" : "high",
+        local ? "output_schema_local_ref" : "output_schema_external_ref",
+        local
+          ? "Tool outputSchema contains a local JSON Schema $ref. Confirm target clients dereference it before relying on structuredContent validation."
+          : "Tool outputSchema contains an external JSON Schema $ref. Review whether clients can resolve it before relying on structuredContent validation."
+      )
+    );
+  }
+  const properties = schema.properties && typeof schema.properties === "object" && !Array.isArray(schema.properties) ? schema.properties : null;
+  const propertyNames = properties ? Object.keys(properties) : [];
+  if ((schema.type === "object" || propertyNames.length > 0) && propertyNames.length === 0) {
+    findings.push(
+      outputSchemaFinding(
+        `${path}.properties`,
+        "medium",
+        "output_schema_without_properties",
+        "Object outputSchema has no properties. Verify this is an intentional empty structured result, not lost result metadata."
+      )
+    );
+  }
+  if (propertyNames.length > 0 && !Array.isArray(schema.required)) {
+    findings.push(
+      outputSchemaFinding(
+        `${path}.required`,
+        "low",
+        "output_properties_without_required_array",
+        "Output schema has properties but no required array. Confirm every structuredContent field is intentionally optional."
+      )
+    );
+  }
+  for (const [name, property] of Object.entries(properties ?? {})) {
+    if (!property || typeof property !== "object" || Array.isArray(property)) {
+      findings.push(
+        outputSchemaFinding(
+          `${path}.properties.${name}`,
+          "high",
+          "invalid_output_property_schema_shape",
+          "Output property schema is not an object. MCP tool outputSchema properties should map result field names to schema objects."
+        )
+      );
+      continue;
+    }
+    if (Array.isArray(property.type)) {
+      findings.push(
+        outputSchemaFinding(
+          `${path}.properties.${name}.type`,
+          "medium",
+          "output_property_union_type_compatibility",
+          "Output property uses a JSON Schema union type array. Add a client regression test before relying on structuredContent validation across clients."
+        )
+      );
+    }
+    if (!("description" in property)) {
+      findings.push(
+        outputSchemaFinding(
+          `${path}.properties.${name}.description`,
+          "low",
+          "output_property_without_description",
+          "Output property is missing a description, which can make client-side display and downstream result handling less reliable."
         )
       );
     }
@@ -545,6 +691,7 @@ function normalizeTool(tool, index) {
       name,
       description,
       inputSchema: tool?.inputSchema ?? tool?.input_schema ?? null,
+      outputSchema: tool?.outputSchema ?? tool?.output_schema ?? null,
       annotations,
       toolConfiguration: tool?._meta?.tool_configuration ?? null,
     }),
@@ -606,6 +753,7 @@ function buildMatrix({ tools, server }) {
     const normalized = normalizeTool(tool, index);
     const classification = classify(normalized);
     const annotationReviewFindings = findAnnotationReviewFindings(tool, classification);
+    const outputSchemaReviewFindings = findOutputSchemaReviewFindings(tool, normalized, classification);
     const policyKey = `${server}.${normalized.name}`.replace(/\s+/g, "_");
     return {
       tool: normalized.name,
@@ -625,6 +773,7 @@ function buildMatrix({ tools, server }) {
       metadataInjectionFindings: normalized.metadataInjectionFindings,
       schemaReviewFindings: normalized.schemaReviewFindings,
       annotationReviewFindings,
+      outputSchemaReviewFindings,
     };
   });
 
@@ -651,6 +800,7 @@ function buildMatrix({ tools, server }) {
     metadataInjectionFindingCount: rows.reduce((total, row) => total + row.metadataInjectionFindings.length, 0),
     schemaReviewFindingCount: rows.reduce((total, row) => total + row.schemaReviewFindings.length, 0),
     annotationReviewFindingCount: rows.reduce((total, row) => total + row.annotationReviewFindings.length, 0),
+    outputSchemaReviewFindingCount: rows.reduce((total, row) => total + row.outputSchemaReviewFindings.length, 0),
     rows,
     launchRule: "New or changed MCP tools should default to ask or deny until their action class, data boundary, approval UI, receipt, and rollback path are reviewed.",
     safety: "Do not include secrets, customer records, private screenshots, payment data, OAuth tokens, cookies, API keys, card, bank, tax, payout, or full transaction identifiers in tools/list examples or reports.",
@@ -795,6 +945,7 @@ function printMarkdown(matrix) {
   console.log(`- Snapshot digest: ${matrix.snapshotDigest}`);
   console.log(`- Metadata/schema injection findings: ${matrix.metadataInjectionFindingCount}`);
   console.log(`- Schema review findings: ${matrix.schemaReviewFindingCount}`);
+  console.log(`- Output schema review findings: ${matrix.outputSchemaReviewFindingCount}`);
   console.log(`- Annotation review findings: ${matrix.annotationReviewFindingCount}`);
   console.log(`- Generated by: ${matrix.generatedBy}`);
   console.log("");
@@ -827,6 +978,20 @@ function printMarkdown(matrix) {
     console.log("| --- | --- | --- | --- | --- |");
     for (const row of matrix.rows) {
       for (const finding of row.schemaReviewFindings) {
+        console.log(`| ${escapeCell(row.tool)} | ${escapeCell(finding.path)} | ${escapeCell(finding.severity)} | ${escapeCell(finding.code)} | ${escapeCell(finding.reason)} |`);
+      }
+    }
+  }
+  if (matrix.outputSchemaReviewFindingCount) {
+    console.log("");
+    console.log("## Output Schema Review Findings");
+    console.log("");
+    console.log("These findings flag missing or incomplete MCP `outputSchema` metadata for tools that appear to return structured data, plus output schemas that may not validate `structuredContent` reliably.");
+    console.log("");
+    console.log("| Tool | Path | Severity | Code | Review note |");
+    console.log("| --- | --- | --- | --- | --- |");
+    for (const row of matrix.rows) {
+      for (const finding of row.outputSchemaReviewFindings) {
         console.log(`| ${escapeCell(row.tool)} | ${escapeCell(finding.path)} | ${escapeCell(finding.severity)} | ${escapeCell(finding.code)} | ${escapeCell(finding.reason)} |`);
       }
     }

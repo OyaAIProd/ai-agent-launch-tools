@@ -1,0 +1,95 @@
+{
+  "tools": [
+    {
+      "name": "evaluate_model",
+      "description": "Evaluate model performance and return structured metrics.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "model_id": {
+            "type": "string",
+            "description": "Model identifier to evaluate."
+          }
+        },
+        "required": ["model_id"]
+      },
+      "annotations": {
+        "readOnlyHint": true,
+        "openWorldHint": false
+      }
+    },
+    {
+      "name": "get_model_status",
+      "description": "Get structured model status.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "model_id": {
+            "type": "string",
+            "description": "Model identifier to inspect."
+          }
+        },
+        "required": ["model_id"]
+      },
+      "outputSchema": {
+        "type": "object",
+        "properties": {
+          "status": {
+            "type": "string",
+            "description": "Current model status."
+          },
+          "checked_at": {
+            "type": "string",
+            "description": "ISO-8601 timestamp for the status check."
+          }
+        }
+      },
+      "annotations": {
+        "readOnlyHint": true,
+        "openWorldHint": false
+      }
+    },
+    {
+      "name": "list_species_projects",
+      "description": "List species projects with structured identifiers and display labels.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "species": {
+            "type": "string",
+            "description": "Species name to filter projects."
+          }
+        },
+        "required": ["species"]
+      },
+      "outputSchema": {
+        "type": "object",
+        "properties": {
+          "projects": {
+            "type": "array",
+            "description": "Matching species project records.",
+            "items": {
+              "type": "object",
+              "properties": {
+                "id": {
+                  "type": "string",
+                  "description": "Project identifier."
+                },
+                "label": {
+                  "type": "string",
+                  "description": "Human-readable project label."
+                }
+              },
+              "required": ["id", "label"]
+            }
+          }
+        },
+        "required": ["projects"]
+      },
+      "annotations": {
+        "readOnlyHint": true,
+        "openWorldHint": false
+      }
+    }
+  ]
+}
