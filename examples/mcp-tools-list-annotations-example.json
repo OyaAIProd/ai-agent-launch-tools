@@ -1,0 +1,53 @@
+{
+  "tools": [
+    {
+      "name": "list_species_projects",
+      "description": "List public species distribution modelling projects.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "query": {
+            "type": "string",
+            "description": "Optional public project search string."
+          }
+        },
+        "required": []
+      }
+    },
+    {
+      "name": "delete_species_project",
+      "description": "Delete a species distribution modelling project.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "project_id": {
+            "type": "string",
+            "description": "Project identifier to delete."
+          }
+        },
+        "required": ["project_id"]
+      },
+      "annotations": {
+        "openWorldHint": false
+      }
+    },
+    {
+      "name": "get_model_status",
+      "description": "Read the model status for a public run.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "run_id": {
+            "type": "string",
+            "description": "Public run identifier."
+          }
+        },
+        "required": ["run_id"]
+      },
+      "annotations": {
+        "readOnlyHint": true,
+        "openWorldHint": false
+      }
+    }
+  ]
+}
