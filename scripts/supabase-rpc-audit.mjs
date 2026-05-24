@@ -14,7 +14,7 @@ function usage() {
   return [
     "Usage: supabase-rpc-audit [options]",
     "",
-    "Reads redacted Supabase SQL/RPC notes and prints a Security Definer RPC risk report.",
+    "Reads redacted Supabase SQL/RPC/view notes and prints an RLS bypass risk report.",
     "",
     "Options:",
     "  --file <path>          Read SQL/notes from a file instead of stdin.",
@@ -69,18 +69,34 @@ function reviewSql(raw) {
   const sql = stripSqlComments(raw);
   const hasSecurityDefiner = /security\s+definer/i.test(sql);
   const exposedSchemaFunction = /create(?:\s+or\s+replace)?\s+function\s+public\./i.test(sql);
+  const exposedSchemaView = /create(?:\s+or\s+replace)?\s+view\s+public\./i.test(sql);
+  const hasSecurityInvokerView = /security_invoker\s*=\s*(?:true|on)/i.test(sql);
   const hasSetSearchPath = /set\s+search_path\s*=/i.test(sql);
   const grantExecuteBroad = /grant\s+execute[\s\S]{0,220}\bto\s+(?:public|anon|authenticated)\b/i.test(sql);
+  const grantSelectBroad = /grant\s+select[\s\S]{0,220}\bto\s+(?:public|anon|authenticated)\b/i.test(sql);
   const revokeExecute = /revoke\s+execute[\s\S]{0,220}\bfrom\s+(?:public|anon|authenticated)\b/i.test(sql);
   const touchesSensitiveTables = /\b(?:profiles|users|sessions|team|teams|tenant|organization|memberships|invites|billing|payments|orders|customers|admin|roles)\b/i.test(sql);
   const hasIdentityCheck = /auth\.uid\s*\(|auth\.jwt\s*\(|current_setting\s*\(\s*'request\.jwt|request\.jwt|is_admin|membership/i.test(sql);
   const usingTrue = /using\s*\(\s*true\s*\)|with\s+check\s*\(\s*true\s*\)/i.test(sql);
   const serviceRole = /service_role|bypassrls|bypass\s+rls/i.test(sql);
   const rpcMention = /rpc\(|remote procedure|function\s+public\.|create\s+function/i.test(sql);
+  const viewMention = /view\s+public\.|create\s+(?:or\s+replace\s+)?view/i.test(sql);
 
   if (!hasInput) {
-    add(findings, "medium", "no_redacted_input", "No redacted SQL or RPC notes provided", "Paste a redacted function, grant, or RPC note to review for SECURITY DEFINER and exposed EXECUTE risk.");
+    add(findings, "medium", "no_redacted_input", "No redacted SQL, RPC, or view notes provided", "Paste a redacted function, view, grant, or RPC note to review for SECURITY DEFINER, missing SECURITY INVOKER, and exposed execution risk.");
     return findings;
+  }
+
+  if (exposedSchemaView && !hasSecurityInvokerView) {
+    add(findings, "high", "public_view_without_security_invoker", "Public view is missing visible security_invoker=true", "In Postgres 15+, public views that should obey underlying table RLS need WITH (security_invoker = true). Otherwise view execution can use owner privileges and bypass caller RLS expectations.");
+  }
+
+  if (exposedSchemaView && !hasSecurityInvokerView && touchesSensitiveTables) {
+    add(findings, "high", "view_rls_bypass_regression", "View over sensitive tables may bypass caller RLS", "Treat missing security_invoker on views over user, profile, team, tenant, billing, admin, or membership data as a launch blocker until anon/authenticated regression calls prove expected row visibility.");
+  }
+
+  if (grantSelectBroad && exposedSchemaView) {
+    add(findings, "high", "broad_view_select_grant", "Broad SELECT grant found on an exposed view", "Review whether anon/authenticated should reach this view at all. If the view stays exposed, verify security_invoker and underlying table RLS with real anon/authenticated calls.");
   }
 
   if (hasSecurityDefiner && exposedSchemaFunction) {
@@ -115,8 +131,12 @@ function reviewSql(raw) {
     add(findings, "low", "rpc_without_definer_marker", "RPC/function found without SECURITY DEFINER marker", "Still review EXECUTE grants and caller checks. Invoker functions can be safer, but callable roles and row access still matter.");
   }
 
+  if (viewMention && hasSecurityInvokerView) {
+    add(findings, "low", "security_invoker_view_present", "Security invoker view marker found", "Keep a regression test that the rendered or recreated view definition preserves WITH (security_invoker = true) and that anon/authenticated calls see only rows allowed by underlying table RLS.");
+  }
+
   if (!findings.length) {
-    add(findings, "low", "no_rpc_blocker_detected", "No obvious SECURITY DEFINER RPC blocker detected", "This is not a safety guarantee. Keep RLS tests, callable-role review, and redacted migration review in the launch checklist.");
+    add(findings, "low", "no_rpc_or_view_blocker_detected", "No obvious SECURITY DEFINER RPC or view blocker detected", "This is not a safety guarantee. Keep RLS tests, callable-role review, view-definition review, and redacted migration review in the launch checklist.");
   }
 
   return findings;
@@ -139,6 +159,7 @@ function buildReport({ label, raw }) {
     findings,
     nextSteps: [
       "Review SECURITY DEFINER functions before launch; they can bypass table RLS.",
+      "For public views that should obey underlying table RLS, preserve WITH (security_invoker = true) and test anon/authenticated calls.",
       "Keep broad EXECUTE grants off public/anon roles unless the RPC is intentionally public.",
       "Add caller-bound auth.uid/auth.jwt/membership checks inside privileged functions that touch tenant, user, billing, admin, or profile data.",
       "Keep real database URLs, tokens, service-role keys, customer data, and private project details out of public reports.",
@@ -151,7 +172,7 @@ function buildReport({ label, raw }) {
 }
 
 function printMarkdown(report) {
-  console.log("# Supabase Security Definer RPC Audit");
+  console.log("# Supabase RPC/View RLS Audit");
   console.log("");
   console.log(`- Label: ${report.label}`);
   console.log(`- Verdict: ${report.verdict}`);

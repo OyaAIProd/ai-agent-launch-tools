@@ -18,9 +18,9 @@ The repo also includes practical MCP/tool-call launch checklists:
 
 It now includes a small config reviewer and `tools/list` importer. The config reviewer turns a redacted Claude Desktop-style MCP config into a pre-install BLOCK / CAUTION / REVIEW report. The importer turns MCP tool metadata into an allow / ask / deny permission matrix with a snapshot digest for re-reviewing changed tools, without invoking any tools. It also recursively scans tool names, descriptions, and every string inside `inputSchema` for metadata/schema injection signals, including nested parameter descriptions, enum values, defaults, and titles. It flags schema-quality drift such as missing or empty `inputSchema`, object schemas without properties, missing `required` arrays, undocumented parameters, boolean/null/array property-schema entries, union `type` arrays that need target-client regression coverage, and JSON Schema `$ref` entries that some MCP clients or LLM tool adapters may not dereference before argument generation. It now also flags missing or incomplete `outputSchema` metadata for tools that appear to return structured data, so teams can review whether `structuredContent` can be validated and rendered reliably. It also flags missing or incomplete MCP `annotations` hints that clients can use for read-only, destructive, idempotent, and open-world approval prompts. It can also print a Codex `config.toml` review snippet that keeps sandbox settings separate from MCP tool approval.
 
-The repo also includes a Supabase Security Definer RPC audit CLI for redacted SQL/RPC notes. It checks local text only and flags public-schema definer functions, broad `EXECUTE` grants, missing `search_path` hardening, and privileged functions that touch sensitive tables without visible caller-bound authorization.
+The repo also includes a Supabase RPC/view RLS audit CLI for redacted SQL/RPC/view notes. It checks local text only and flags public-schema definer functions, public views missing `security_invoker`, broad `EXECUTE` or `SELECT` grants, missing `search_path` hardening, and privileged functions or views that can bypass caller RLS expectations.
 
-The public browser tools also include Supabase launch checks for teams pairing AI agents with Supabase. Use them to review redacted Data API grants, anonymous sign-in RLS boundaries, Security Definer RPCs, and project-scoped Supabase MCP branching before an agent applies migrations or touches production data.
+The public browser tools also include Supabase launch checks for teams pairing AI agents with Supabase. Use them to review redacted Data API grants, anonymous sign-in RLS boundaries, Security Definer RPCs, exposed views, and project-scoped Supabase MCP branching before an agent applies migrations or touches production data.
 
 Need the full launch workflow? The $25 AI Agent Launch Pack includes the local app, safe-intake builder, checklist, templates, sample report, and optional fixed-scope 24-hour review path:
 
@@ -56,10 +56,10 @@ Run the MCP trust verification planner:
 npx --package github:kayalopez/ai-agent-launch-tools#v0.1.15 mcp-trust-check --server "candidate MCP server" --workflow "one AI workflow that can read docs and call approved tools"
 ```
 
-Review redacted Supabase SQL/RPC notes for Security Definer risk:
+Review redacted Supabase SQL/RPC/view notes for Security Definer and security-invoker risk:
 
 ```bash
-npx --package github:kayalopez/ai-agent-launch-tools#v0.1.16 supabase-rpc-audit --file supabase_rpc.redacted.sql
+npx --package github:kayalopez/ai-agent-launch-tools#v0.1.17 supabase-rpc-audit --file supabase_rpc.redacted.sql
 ```
 
 Try the included Supabase RPC example after cloning:
@@ -68,10 +68,16 @@ Try the included Supabase RPC example after cloning:
 node scripts/supabase-rpc-audit.mjs --file examples/supabase-security-definer-rpc.sql
 ```
 
+Try the included Supabase view example after cloning:
+
+```bash
+node scripts/supabase-rpc-audit.mjs --file examples/supabase-security-invoker-view.sql
+```
+
 JSON output:
 
 ```bash
-npx --package github:kayalopez/ai-agent-launch-tools#v0.1.16 supabase-rpc-audit --file supabase_rpc.redacted.sql --json
+npx --package github:kayalopez/ai-agent-launch-tools#v0.1.17 supabase-rpc-audit --file supabase_rpc.redacted.sql --json
 ```
 
 Review a redacted MCP client config before installing or approving servers:
