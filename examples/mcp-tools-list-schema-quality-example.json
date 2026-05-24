@@ -1,0 +1,25 @@
+{
+  "tools": [
+    {
+      "name": "effects_wrapped_tool",
+      "description": "Generated from a wrapped validator where tools/list lost parameter metadata.",
+      "inputSchema": {}
+    },
+    {
+      "name": "get_proxy_details",
+      "description": "Get proxy details by name.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string"
+          }
+        }
+      }
+    },
+    {
+      "name": "refresh_status",
+      "description": "Refresh a public status snapshot."
+    }
+  ]
+}

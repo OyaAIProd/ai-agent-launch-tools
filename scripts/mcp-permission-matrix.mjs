@@ -208,6 +208,10 @@ const METADATA_INJECTION_PATTERNS = [
   },
 ];
 
+function schemaFinding(path, severity, code, reason) {
+  return { path, severity, code, reason };
+}
+
 function usage() {
   return [
     "Usage: mcp-permission-matrix [options]",
@@ -332,12 +336,90 @@ function findMetadataInjectionFindings(tool) {
   return findings;
 }
 
+function findSchemaReviewFindings(tool) {
+  const hasInputSchema = tool && Object.prototype.hasOwnProperty.call(tool, "inputSchema");
+  const hasSnakeInputSchema = tool && Object.prototype.hasOwnProperty.call(tool, "input_schema");
+  if (!hasInputSchema && !hasSnakeInputSchema) {
+    return [
+      schemaFinding(
+        "inputSchema",
+        "medium",
+        "missing_input_schema",
+        "Tool metadata is missing inputSchema, so clients cannot distinguish a no-argument tool from incomplete metadata."
+      ),
+    ];
+  }
+
+  const path = hasInputSchema ? "inputSchema" : "input_schema";
+  const schema = hasInputSchema ? tool.inputSchema : tool.input_schema;
+  if (!schema || typeof schema !== "object" || Array.isArray(schema)) {
+    return [
+      schemaFinding(
+        path,
+        "medium",
+        "invalid_input_schema_shape",
+        "Tool inputSchema is not an object. Verify the server is emitting JSON Schema-compatible metadata."
+      ),
+    ];
+  }
+
+  const keys = Object.keys(schema);
+  if (keys.length === 0) {
+    return [
+      schemaFinding(
+        path,
+        "high",
+        "empty_input_schema",
+        "Tool inputSchema is an empty object. This often means wrapper schemas or generators dropped parameter metadata from tools/list."
+      ),
+    ];
+  }
+
+  const findings = [];
+  const properties = schema.properties && typeof schema.properties === "object" && !Array.isArray(schema.properties) ? schema.properties : null;
+  const propertyNames = properties ? Object.keys(properties) : [];
+  if ((schema.type === "object" || propertyNames.length > 0) && propertyNames.length === 0) {
+    findings.push(
+      schemaFinding(
+        `${path}.properties`,
+        "medium",
+        "object_schema_without_properties",
+        "Object inputSchema has no properties. Verify this is an intentional no-argument tool, not lost schema metadata."
+      )
+    );
+  }
+  if (propertyNames.length > 0 && !Array.isArray(schema.required)) {
+    findings.push(
+      schemaFinding(
+        `${path}.required`,
+        "low",
+        "properties_without_required_array",
+        "Input schema has properties but no required array. Confirm every parameter is intentionally optional."
+      )
+    );
+  }
+  for (const [name, property] of Object.entries(properties ?? {})) {
+    if (property && typeof property === "object" && !Array.isArray(property) && !("description" in property)) {
+      findings.push(
+        schemaFinding(
+          `${path}.properties.${name}.description`,
+          "low",
+          "property_without_description",
+          "Input parameter is missing a description, which can make client-side review and LLM argument generation less reliable."
+        )
+      );
+    }
+  }
+  return findings;
+}
+
 function normalizeTool(tool, index) {
   const name = typeof tool?.name === "string" && tool.name.trim() ? tool.name.trim() : `tool_${index + 1}`;
   const description = typeof tool?.description === "string" ? tool.description.trim() : "";
   const annotations = tool?.annotations && typeof tool.annotations === "object" ? tool.annotations : {};
   const schemaText = stringifySchemaKeys(tool?.inputSchema ?? tool?.input_schema ?? {});
   const metadataInjectionFindings = findMetadataInjectionFindings(tool);
+  const schemaReviewFindings = findSchemaReviewFindings(tool);
   const metaText = [
     tool?._meta?.tool_configuration?.require_approval,
     tool?._meta?.tool_configuration?.server_label,
@@ -356,6 +438,7 @@ function normalizeTool(tool, index) {
     }),
     searchable: `${name} ${description} ${schemaText} ${metaText}`.toLowerCase(),
     metadataInjectionFindings,
+    schemaReviewFindings,
   };
 }
 
@@ -378,6 +461,14 @@ function classify(normalized) {
       actionClass: "metadata_injection_signal",
       gate: "deny",
       reason: "Tool name, description, or inputSchema contains instruction-like, tool-selection-bias, or exfiltration language.",
+    };
+  }
+
+  if (normalized.schemaReviewFindings.some((finding) => finding.severity === "high" || finding.severity === "medium")) {
+    return {
+      actionClass: "schema_review_signal",
+      gate: "ask",
+      reason: "Tool inputSchema is missing, empty, or underspecified. Review metadata completeness before first invocation.",
     };
   }
 
@@ -419,6 +510,7 @@ function buildMatrix({ tools, server }) {
       reason: classification.reason,
       evidence: GATES[classification.gate].evidence,
       metadataInjectionFindings: normalized.metadataInjectionFindings,
+      schemaReviewFindings: normalized.schemaReviewFindings,
     };
   });
 
@@ -443,6 +535,7 @@ function buildMatrix({ tools, server }) {
     }),
     totals,
     metadataInjectionFindingCount: rows.reduce((total, row) => total + row.metadataInjectionFindings.length, 0),
+    schemaReviewFindingCount: rows.reduce((total, row) => total + row.schemaReviewFindings.length, 0),
     rows,
     launchRule: "New or changed MCP tools should default to ask or deny until their action class, data boundary, approval UI, receipt, and rollback path are reviewed.",
     safety: "Do not include secrets, customer records, private screenshots, payment data, OAuth tokens, cookies, API keys, card, bank, tax, payout, or full transaction identifiers in tools/list examples or reports.",
@@ -586,6 +679,7 @@ function printMarkdown(matrix) {
   console.log(`- Default gates: allow ${matrix.totals.allow}, ask ${matrix.totals.ask}, deny ${matrix.totals.deny}`);
   console.log(`- Snapshot digest: ${matrix.snapshotDigest}`);
   console.log(`- Metadata/schema injection findings: ${matrix.metadataInjectionFindingCount}`);
+  console.log(`- Schema review findings: ${matrix.schemaReviewFindingCount}`);
   console.log(`- Generated by: ${matrix.generatedBy}`);
   console.log("");
   console.log("| Tool | Policy key | Digest | Action class | Default gate | Reason | Evidence to keep |");
@@ -604,6 +698,20 @@ function printMarkdown(matrix) {
     for (const row of matrix.rows) {
       for (const finding of row.metadataInjectionFindings) {
         console.log(`| ${escapeCell(row.tool)} | ${escapeCell(finding.path)} | ${escapeCell(finding.severity)} | ${escapeCell(finding.code)} | ${escapeCell(finding.matched)} | ${escapeCell(finding.reason)} |`);
+      }
+    }
+  }
+  if (matrix.schemaReviewFindingCount) {
+    console.log("");
+    console.log("## Schema Review Findings");
+    console.log("");
+    console.log("These findings flag missing, empty, or underspecified `inputSchema` metadata that can break client-side review, validation, or argument generation.");
+    console.log("");
+    console.log("| Tool | Path | Severity | Code | Review note |");
+    console.log("| --- | --- | --- | --- | --- |");
+    for (const row of matrix.rows) {
+      for (const finding of row.schemaReviewFindings) {
+        console.log(`| ${escapeCell(row.tool)} | ${escapeCell(finding.path)} | ${escapeCell(finding.severity)} | ${escapeCell(finding.code)} | ${escapeCell(finding.reason)} |`);
       }
     }
   }
