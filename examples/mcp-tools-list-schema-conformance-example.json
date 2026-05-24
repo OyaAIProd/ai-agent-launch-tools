@@ -1,0 +1,41 @@
+{
+  "tools": [
+    {
+      "name": "invoke_function",
+      "description": "Invoke a function and wait for the result.",
+      "inputSchema": {
+        "type": "object",
+        "required": ["functionId"],
+        "properties": {
+          "functionId": {
+            "type": "string",
+            "description": "Function slug, ID, or name."
+          },
+          "data": true,
+          "user": true,
+          "timeout": {
+            "type": "integer"
+          }
+        },
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "echo_array",
+      "description": "Echo an array parameter.",
+      "inputSchema": {
+        "type": "object",
+        "required": ["items"],
+        "properties": {
+          "items": {
+            "type": ["array", "null"],
+            "items": {
+              "type": "string"
+            },
+            "description": "A list of strings, or null."
+          }
+        }
+      }
+    }
+  ]
+}

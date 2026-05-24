@@ -429,7 +429,28 @@ function findSchemaReviewFindings(tool) {
     );
   }
   for (const [name, property] of Object.entries(properties ?? {})) {
-    if (property && typeof property === "object" && !Array.isArray(property) && !("description" in property)) {
+    if (!property || typeof property !== "object" || Array.isArray(property)) {
+      findings.push(
+        schemaFinding(
+          `${path}.properties.${name}`,
+          "high",
+          "invalid_property_schema_shape",
+          "Input parameter schema is not an object. MCP tool inputSchema properties should map parameter names to schema objects; boolean, null, array, or primitive property entries can break client validation and argument generation."
+        )
+      );
+      continue;
+    }
+    if (Array.isArray(property.type)) {
+      findings.push(
+        schemaFinding(
+          `${path}.properties.${name}.type`,
+          "medium",
+          "property_union_type_compatibility",
+          "Input parameter uses a JSON Schema union type array. This can be valid JSON Schema, but some MCP clients or LLM tool adapters may drop nullable/union detail before argument generation; add a regression test for the target client."
+        )
+      );
+    }
+    if (!("description" in property)) {
       findings.push(
         schemaFinding(
           `${path}.properties.${name}.description`,
