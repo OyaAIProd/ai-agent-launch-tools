@@ -1,0 +1,58 @@
+{
+  "server_label": "example-support-mcp",
+  "tools": [
+    {
+      "name": "list_public_docs",
+      "description": "List public help-center articles.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "query": {
+            "type": "string",
+            "description": "Public search terms."
+          }
+        }
+      }
+    },
+    {
+      "name": "read_customer_ticket",
+      "description": "Read a support ticket by placeholder ticket id.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "ticket_id": {
+            "type": "string",
+            "description": "Placeholder ticket id only."
+          }
+        }
+      }
+    },
+    {
+      "name": "send_customer_reply",
+      "description": "Send an approved support reply to the ticket thread.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "ticket_id": {
+            "type": "string"
+          },
+          "message": {
+            "type": "string"
+          }
+        }
+      }
+    },
+    {
+      "name": "run_shell_command",
+      "description": "Run a shell command in a project workspace.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "command": {
+            "type": "string"
+          }
+        }
+      }
+    }
+  ]
+}
