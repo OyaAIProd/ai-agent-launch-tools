@@ -18,6 +18,24 @@ Need the full launch workflow? The $25 AI Agent Launch Pack includes the local a
 
 https://ai-launch-risk-check-public.vercel.app/
 
+## Buy Now If
+
+The paid pack is a fit when:
+
+- You are launching one agent workflow this week.
+- The workflow can read private context or trigger tool calls.
+- You need launch evidence, templates, and a safer intake path today.
+
+Start with the free tools instead when:
+
+- You cannot describe one workflow without secrets or customer records.
+- You need legal advice, compliance certification, or penetration testing.
+- You only need general reading and the free checklists already cover it.
+
+Free readiness report:
+
+https://ai-launch-risk-check-public.vercel.app/launch-readiness-report.html
+
 If the scope fits, the digital pack checkout starts here:
 
 https://ai-launch-risk-check-public.vercel.app/checkout-after-scope.html#digital-pack
