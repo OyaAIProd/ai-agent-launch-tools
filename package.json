@@ -1,6 +1,6 @@
 {
   "name": "ai-agent-launch-tools",
-  "version": "0.1.15",
+  "version": "0.1.16",
   "description": "Dependency-free launch hygiene tools for AI agent and MCP builders.",
   "type": "module",
   "private": false,
@@ -8,7 +8,8 @@
     "public-surface-scan": "./scripts/public-surface-scan.mjs",
     "mcp-trust-check": "./scripts/mcp-trust-check.mjs",
     "mcp-permission-matrix": "./scripts/mcp-permission-matrix.mjs",
-    "mcp-config-risk": "./scripts/mcp-config-risk.mjs"
+    "mcp-config-risk": "./scripts/mcp-config-risk.mjs",
+    "supabase-rpc-audit": "./scripts/supabase-rpc-audit.mjs"
   },
   "files": [
     "README.md",
@@ -19,7 +20,7 @@
   ],
   "scripts": {
     "scan": "node scripts/public-surface-scan.mjs",
-    "check": "node --check scripts/public-surface-scan.mjs && node --check scripts/mcp-trust-check.mjs && node --check scripts/mcp-permission-matrix.mjs && node --check scripts/mcp-config-risk.mjs && node scripts/mcp-permission-matrix.mjs --file examples/mcp-tools-list-schema-injection-example.json --json >/dev/null && node scripts/mcp-permission-matrix.mjs --file examples/mcp-tools-list-schema-quality-example.json --json >/dev/null && node scripts/mcp-permission-matrix.mjs --file examples/mcp-tools-list-schema-ref-example.json --json >/dev/null && node scripts/mcp-permission-matrix.mjs --file examples/mcp-tools-list-schema-conformance-example.json --json >/dev/null && node scripts/mcp-permission-matrix.mjs --file examples/mcp-tools-list-annotations-example.json --json >/dev/null && node scripts/mcp-permission-matrix.mjs --file examples/mcp-tools-list-output-schema-example.json --json >/dev/null"
+    "check": "node --check scripts/public-surface-scan.mjs && node --check scripts/mcp-trust-check.mjs && node --check scripts/mcp-permission-matrix.mjs && node --check scripts/mcp-config-risk.mjs && node --check scripts/supabase-rpc-audit.mjs && node scripts/mcp-permission-matrix.mjs --file examples/mcp-tools-list-schema-injection-example.json --json >/dev/null && node scripts/mcp-permission-matrix.mjs --file examples/mcp-tools-list-schema-quality-example.json --json >/dev/null && node scripts/mcp-permission-matrix.mjs --file examples/mcp-tools-list-schema-ref-example.json --json >/dev/null && node scripts/mcp-permission-matrix.mjs --file examples/mcp-tools-list-schema-conformance-example.json --json >/dev/null && node scripts/mcp-permission-matrix.mjs --file examples/mcp-tools-list-annotations-example.json --json >/dev/null && node scripts/mcp-permission-matrix.mjs --file examples/mcp-tools-list-output-schema-example.json --json >/dev/null && node scripts/supabase-rpc-audit.mjs --file examples/supabase-security-definer-rpc.sql --json >/dev/null"
   },
   "license": "MIT"
 }

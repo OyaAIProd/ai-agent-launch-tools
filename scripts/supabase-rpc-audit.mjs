@@ -1,0 +1,202 @@
+#!/usr/bin/env node
+
+import fs from "node:fs";
+import crypto from "node:crypto";
+
+const SECRET_PATTERNS = [
+  /\b(?:postgres|postgresql):\/\/[^:\s]+:[^@\s]+@/i,
+  /\b(?:sk|rk|pk)_(?:live|test)_[A-Za-z0-9_]{12,}\b/,
+  /\beyJ[A-Za-z0-9_-]{20,}\.[A-Za-z0-9_-]{20,}\.[A-Za-z0-9_-]{10,}\b/,
+  /\b(?:api[_-]?key|bearer|password|secret|service[_-]?role[_-]?key|token)\b\s*[:=]\s*["']?[^"',\s]{8,}/i,
+];
+
+function usage() {
+  return [
+    "Usage: supabase-rpc-audit [options]",
+    "",
+    "Reads redacted Supabase SQL/RPC notes and prints a Security Definer RPC risk report.",
+    "",
+    "Options:",
+    "  --file <path>          Read SQL/notes from a file instead of stdin.",
+    "  --label <label>        Report label.",
+    "  --json                 Print structured JSON.",
+    "  --markdown             Print Markdown. Default.",
+    "  --help                 Show this help.",
+    "",
+    "Redact secrets before use. This tool never connects to Supabase, fetches URLs,",
+    "calls RPCs, starts servers, or validates safety. It pattern-matches local text only.",
+  ].join("\n");
+}
+
+function readOption(args, name, fallback) {
+  const index = args.indexOf(name);
+  if (index === -1) return fallback;
+  const value = args[index + 1];
+  if (!value || value.startsWith("--")) throw new Error(`${name} requires a value.`);
+  return value;
+}
+
+function readInput(args) {
+  const file = readOption(args, "--file", "");
+  if (file) return fs.readFileSync(file, "utf8");
+  if (process.stdin.isTTY) throw new Error("No input provided. Pass --file <path> or pipe redacted SQL on stdin.");
+  return fs.readFileSync(0, "utf8");
+}
+
+function shortDigest(text) {
+  return crypto.createHash("sha256").update(text).digest("hex").slice(0, 12);
+}
+
+function stripSqlComments(text) {
+  return text.replace(/\/\*[\s\S]*?\*\//g, " ").replace(/--.*$/gm, " ");
+}
+
+function validateRedacted(raw) {
+  const hit = SECRET_PATTERNS.find((pattern) => pattern.test(raw));
+  if (hit) {
+    throw new Error("Input appears to contain an unredacted secret, token, credentialed database URL, or service-role key. Redact it before review.");
+  }
+}
+
+function add(findings, severity, code, title, detail) {
+  findings.push({ severity, code, title, detail });
+}
+
+function reviewSql(raw) {
+  validateRedacted(raw);
+  const findings = [];
+  const hasInput = raw.trim().length > 0;
+  const sql = stripSqlComments(raw);
+  const hasSecurityDefiner = /security\s+definer/i.test(sql);
+  const exposedSchemaFunction = /create(?:\s+or\s+replace)?\s+function\s+public\./i.test(sql);
+  const hasSetSearchPath = /set\s+search_path\s*=/i.test(sql);
+  const grantExecuteBroad = /grant\s+execute[\s\S]{0,220}\bto\s+(?:public|anon|authenticated)\b/i.test(sql);
+  const revokeExecute = /revoke\s+execute[\s\S]{0,220}\bfrom\s+(?:public|anon|authenticated)\b/i.test(sql);
+  const touchesSensitiveTables = /\b(?:profiles|users|sessions|team|teams|tenant|organization|memberships|invites|billing|payments|orders|customers|admin|roles)\b/i.test(sql);
+  const hasIdentityCheck = /auth\.uid\s*\(|auth\.jwt\s*\(|current_setting\s*\(\s*'request\.jwt|request\.jwt|is_admin|membership/i.test(sql);
+  const usingTrue = /using\s*\(\s*true\s*\)|with\s+check\s*\(\s*true\s*\)/i.test(sql);
+  const serviceRole = /service_role|bypassrls|bypass\s+rls/i.test(sql);
+  const rpcMention = /rpc\(|remote procedure|function\s+public\.|create\s+function/i.test(sql);
+
+  if (!hasInput) {
+    add(findings, "medium", "no_redacted_input", "No redacted SQL or RPC notes provided", "Paste a redacted function, grant, or RPC note to review for SECURITY DEFINER and exposed EXECUTE risk.");
+    return findings;
+  }
+
+  if (hasSecurityDefiner && exposedSchemaFunction) {
+    add(findings, "high", "security_definer_in_exposed_schema", "SECURITY DEFINER function appears in the public schema", "Move privileged helper functions to a non-exposed schema or prove this public RPC is intentionally callable and has caller-bound authorization checks.");
+  } else if (hasSecurityDefiner) {
+    add(findings, "medium", "security_definer_review_required", "SECURITY DEFINER function found", "Review creator privileges, exposed schema placement, EXECUTE grants, search_path, and caller authorization before launch.");
+  }
+
+  if (hasSecurityDefiner && !hasSetSearchPath) {
+    add(findings, "medium", "security_definer_search_path_missing", "SECURITY DEFINER function lacks visible search_path hardening", "Set a narrow search_path so the function does not resolve caller-controlled objects or unexpected public objects.");
+  }
+
+  if (grantExecuteBroad) {
+    add(findings, "high", "broad_execute_grant", "Broad EXECUTE grant found", "Revoke broad function execution first, then grant only the exact role that should call the RPC. Treat anon execution as a launch blocker unless it is intentionally public.");
+  } else if (rpcMention && !revokeExecute) {
+    add(findings, "medium", "execute_privilege_evidence_missing", "EXECUTE privilege evidence missing", "Include revoke/grant lines in the review packet so callable roles are explicit.");
+  }
+
+  if (hasSecurityDefiner && touchesSensitiveTables && !hasIdentityCheck) {
+    add(findings, "high", "rls_bypass_without_caller_check", "Privileged function touches sensitive tables without visible caller check", "A definer RPC can bypass table RLS. Add explicit caller identity, membership, tenant, or admin checks inside the function before returning data or mutating rows.");
+  }
+
+  if (usingTrue) {
+    add(findings, "high", "permissive_policy_near_rpc", "Permissive policy appears near RPC code", "A permissive policy plus broad RPC access can turn a quick fix into broad data exposure. Replace true policies with ownership or tenant conditions.");
+  }
+
+  if (serviceRole) {
+    add(findings, "medium", "service_role_or_bypassrls_review", "Service-role or BYPASSRLS language found", "Confirm privileged keys or bypass roles are never browser reachable and are not used as a workaround for client-side RLS failures.");
+  }
+
+  if (!hasSecurityDefiner && rpcMention) {
+    add(findings, "low", "rpc_without_definer_marker", "RPC/function found without SECURITY DEFINER marker", "Still review EXECUTE grants and caller checks. Invoker functions can be safer, but callable roles and row access still matter.");
+  }
+
+  if (!findings.length) {
+    add(findings, "low", "no_rpc_blocker_detected", "No obvious SECURITY DEFINER RPC blocker detected", "This is not a safety guarantee. Keep RLS tests, callable-role review, and redacted migration review in the launch checklist.");
+  }
+
+  return findings;
+}
+
+function summarize(findings) {
+  if (findings.some((finding) => finding.severity === "high")) return "BLOCK";
+  if (findings.some((finding) => finding.severity === "medium")) return "CAUTION";
+  return "REVIEW";
+}
+
+function buildReport({ label, raw }) {
+  const findings = reviewSql(raw);
+  return {
+    ok: true,
+    label,
+    generatedBy: "ai-agent-launch-tools supabase-rpc-audit",
+    inputDigest: shortDigest(raw),
+    verdict: summarize(findings),
+    findings,
+    nextSteps: [
+      "Review SECURITY DEFINER functions before launch; they can bypass table RLS.",
+      "Keep broad EXECUTE grants off public/anon roles unless the RPC is intentionally public.",
+      "Add caller-bound auth.uid/auth.jwt/membership checks inside privileged functions that touch tenant, user, billing, admin, or profile data.",
+      "Keep real database URLs, tokens, service-role keys, customer data, and private project details out of public reports.",
+    ],
+    links: {
+      browserAudit: "https://ai-launch-risk-check-public.vercel.app/supabase-security-definer-rpc-audit.html",
+      sampleReport: "https://ai-launch-risk-check-public.vercel.app/sample-supabase-grants-rls-report.md",
+    },
+  };
+}
+
+function printMarkdown(report) {
+  console.log("# Supabase Security Definer RPC Audit");
+  console.log("");
+  console.log(`- Label: ${report.label}`);
+  console.log(`- Verdict: ${report.verdict}`);
+  console.log(`- Input digest: ${report.inputDigest}`);
+  console.log(`- Generated by: ${report.generatedBy}`);
+  console.log("");
+  console.log("| Severity | Code | Finding | Review note |");
+  console.log("| --- | --- | --- | --- |");
+  for (const finding of report.findings) {
+    console.log(`| ${finding.severity.toUpperCase()} | ${finding.code} | ${finding.title} | ${finding.detail} |`);
+  }
+  console.log("");
+  console.log("## Next Steps");
+  console.log("");
+  for (const step of report.nextSteps) console.log(`- ${step}`);
+  console.log("");
+  console.log("## Links");
+  console.log("");
+  console.log(`- Browser audit: ${report.links.browserAudit}`);
+  console.log(`- Sample report: ${report.links.sampleReport}`);
+  console.log("");
+  console.log("## Safety");
+  console.log("");
+  console.log("This tool pattern-matches redacted local text only. It does not connect to Supabase, call RPCs, fetch URLs, start servers, or prove that a project is safe.");
+}
+
+function main() {
+  const args = process.argv.slice(2);
+  if (args.includes("--help")) {
+    console.log(usage());
+    return;
+  }
+  const raw = readInput(args);
+  const label = readOption(args, "--label", "redacted Supabase SQL");
+  const report = buildReport({ label, raw });
+  if (args.includes("--json")) {
+    console.log(JSON.stringify(report, null, 2));
+  } else {
+    printMarkdown(report);
+  }
+}
+
+try {
+  main();
+} catch (error) {
+  console.error(`Error: ${error.message}`);
+  process.exitCode = 1;
+}
