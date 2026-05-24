@@ -10,9 +10,10 @@ The first tool is a public launch-surface scanner for sites you own or have perm
 - Source-map exposure hints
 - Public build variable clues
 
-The repo also includes a practical MCP/tool-call launch checklist:
+The repo also includes practical MCP/tool-call launch checklists:
 
 - [MCP prompt-injection launch checklist](checklists/mcp-prompt-injection-launch-checklist.md)
+- [MCP mutation replay guard checklist](checklists/mcp-mutation-replay-guard-checklist.md)
 
 Need the full launch workflow? The $25 AI Agent Launch Pack includes the local app, safe-intake builder, checklist, templates, sample report, and optional fixed-scope 24-hour review path:
 
@@ -78,6 +79,8 @@ These no-login tools are live:
 - MCP prompt-injection eval guide: https://ai-launch-risk-check-public.vercel.app/mcp-prompt-injection-eval.html
 - MCP prompt-injection fixture library: https://ai-launch-risk-check-public.vercel.app/mcp-prompt-injection-fixtures.html
 - Agent tool permission matrix: https://ai-launch-risk-check-public.vercel.app/agent-tool-permission-matrix.html
+- MCP first-invoke approval checklist: https://ai-launch-risk-check-public.vercel.app/mcp-first-invoke-approval-checklist.html
+- MCP tool approval criteria generator: https://ai-launch-risk-check-public.vercel.app/mcp-tool-approval-criteria.html
 - Agent API key bootstrap checklist: https://ai-launch-risk-check-public.vercel.app/agent-api-key-bootstrap-checklist.html
 
 The full paid pack and fixed-scope review are described on the product page:
