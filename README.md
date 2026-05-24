@@ -18,7 +18,7 @@ The repo also includes practical MCP/tool-call launch checklists:
 
 It now includes a small config reviewer and `tools/list` importer. The config reviewer turns a redacted Claude Desktop-style MCP config into a pre-install BLOCK / CAUTION / REVIEW report. The importer turns MCP tool metadata into an allow / ask / deny permission matrix with a snapshot digest for re-reviewing changed tools, without invoking any tools. It also recursively scans tool names, descriptions, and every string inside `inputSchema` for metadata/schema injection signals, including nested parameter descriptions, enum values, defaults, and titles. It flags schema-quality drift such as missing or empty `inputSchema`, object schemas without properties, missing `required` arrays, undocumented parameters, boolean/null/array property-schema entries, union `type` arrays that need target-client regression coverage, and JSON Schema `$ref` entries that some MCP clients or LLM tool adapters may not dereference before argument generation. It now also flags missing or incomplete `outputSchema` metadata for tools that appear to return structured data, so teams can review whether `structuredContent` can be validated and rendered reliably. It also flags missing or incomplete MCP `annotations` hints that clients can use for read-only, destructive, idempotent, and open-world approval prompts. It can also print a Codex `config.toml` review snippet that keeps sandbox settings separate from MCP tool approval.
 
-The public browser tools also include Supabase launch checks for teams pairing AI agents with Supabase. Use them to review redacted Data API grants, anonymous sign-in RLS boundaries, and project-scoped Supabase MCP branching before an agent applies migrations or touches production data.
+The public browser tools also include Supabase launch checks for teams pairing AI agents with Supabase. Use them to review redacted Data API grants, anonymous sign-in RLS boundaries, Security Definer RPCs, and project-scoped Supabase MCP branching before an agent applies migrations or touches production data.
 
 Need the full launch workflow? The $25 AI Agent Launch Pack includes the local app, safe-intake builder, checklist, templates, sample report, and optional fixed-scope 24-hour review path:
 
@@ -183,6 +183,7 @@ These no-login tools are live:
 - Agent API key bootstrap checklist: https://ai-launch-risk-check-public.vercel.app/agent-api-key-bootstrap-checklist.html
 - Supabase API grants readiness checker: https://ai-launch-risk-check-public.vercel.app/supabase-api-grants-readiness.html
 - Supabase anonymous RLS audit matrix: https://ai-launch-risk-check-public.vercel.app/supabase-anonymous-rls-audit.html
+- Supabase Security Definer RPC audit: https://ai-launch-risk-check-public.vercel.app/supabase-security-definer-rpc-audit.html
 - Supabase MCP branching readiness checker: https://ai-launch-risk-check-public.vercel.app/supabase-mcp-branching-readiness.html
 - Sample Supabase grants/RLS report: https://ai-launch-risk-check-public.vercel.app/sample-supabase-grants-rls-report.md
 
