@@ -47,19 +47,19 @@ https://ai-launch-risk-check-public.vercel.app/checkout-after-scope.html#digital
 Run the MCP trust verification planner:
 
 ```bash
-npx github:kayalopez/ai-agent-launch-tools mcp-trust-check --server "candidate MCP server" --workflow "one AI workflow that can read docs and call approved tools"
+npx --package github:kayalopez/ai-agent-launch-tools#v0.1.4 mcp-trust-check --server "candidate MCP server" --workflow "one AI workflow that can read docs and call approved tools"
 ```
 
 JSON output:
 
 ```bash
-npx github:kayalopez/ai-agent-launch-tools mcp-trust-check --server "candidate MCP server" --json
+npx --package github:kayalopez/ai-agent-launch-tools#v0.1.4 mcp-trust-check --server "candidate MCP server" --json
 ```
 
-Run directly from GitHub:
+Run the public launch-surface scanner from GitHub:
 
 ```bash
-npx github:kayalopez/ai-agent-launch-tools https://example.com
+npx --package github:kayalopez/ai-agent-launch-tools#v0.1.4 public-surface-scan https://example.com
 ```
 
 Or after cloning:
@@ -71,13 +71,13 @@ node scripts/public-surface-scan.mjs https://example.com
 JSON output:
 
 ```bash
-npx github:kayalopez/ai-agent-launch-tools https://example.com --json
+npx --package github:kayalopez/ai-agent-launch-tools#v0.1.4 public-surface-scan https://example.com --json
 ```
 
 Markdown report:
 
 ```bash
-npx github:kayalopez/ai-agent-launch-tools https://example.com --markdown
+npx --package github:kayalopez/ai-agent-launch-tools#v0.1.4 public-surface-scan https://example.com --markdown
 ```
 
 The scanner blocks localhost, private, reserved, and non-standard-port targets. It is for public launch hygiene only, not penetration testing, vulnerability scanning, legal advice, compliance certification, or a security guarantee.
