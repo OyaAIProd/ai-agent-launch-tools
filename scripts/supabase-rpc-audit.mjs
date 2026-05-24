@@ -21,6 +21,7 @@ function usage() {
     "  --label <label>        Report label.",
     "  --json                 Print structured JSON.",
     "  --markdown             Print Markdown. Default.",
+    "  --fail-on <severity>   Exit 2 when a finding is at or above low, medium, or high.",
     "  --help                 Show this help.",
     "",
     "Redact secrets before use. This tool never connects to Supabase, fetches URLs,",
@@ -60,6 +61,27 @@ function validateRedacted(raw) {
 
 function add(findings, severity, code, title, detail) {
   findings.push({ severity, code, title, detail });
+}
+
+const SEVERITY_RANK = {
+  low: 1,
+  medium: 2,
+  high: 3,
+};
+
+function parseFailOn(value) {
+  if (!value) return "";
+  const normalized = value.toLowerCase();
+  if (!Object.hasOwn(SEVERITY_RANK, normalized)) {
+    throw new Error("--fail-on must be one of: low, medium, high.");
+  }
+  return normalized;
+}
+
+function shouldFail(findings, failOn) {
+  if (!failOn) return false;
+  const threshold = SEVERITY_RANK[failOn];
+  return findings.some((finding) => SEVERITY_RANK[finding.severity] >= threshold);
 }
 
 function reviewSql(raw) {
@@ -148,14 +170,20 @@ function summarize(findings) {
   return "REVIEW";
 }
 
-function buildReport({ label, raw }) {
+function buildReport({ label, raw, failOn }) {
   const findings = reviewSql(raw);
+  const failOnMatched = shouldFail(findings, failOn);
   return {
     ok: true,
     label,
     generatedBy: "ai-agent-launch-tools supabase-rpc-audit",
     inputDigest: shortDigest(raw),
     verdict: summarize(findings),
+    ci: {
+      failOn: failOn || null,
+      wouldFail: failOnMatched,
+      exitCode: failOnMatched ? 2 : 0,
+    },
     findings,
     nextSteps: [
       "Review SECURITY DEFINER functions before launch; they can bypass table RLS.",
@@ -207,12 +235,14 @@ function main() {
   }
   const raw = readInput(args);
   const label = readOption(args, "--label", "redacted Supabase SQL");
-  const report = buildReport({ label, raw });
+  const failOn = parseFailOn(readOption(args, "--fail-on", ""));
+  const report = buildReport({ label, raw, failOn });
   if (args.includes("--json")) {
     console.log(JSON.stringify(report, null, 2));
   } else {
     printMarkdown(report);
   }
+  if (report.ci.wouldFail) process.exitCode = report.ci.exitCode;
 }
 
 try {
