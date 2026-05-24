@@ -306,6 +306,23 @@ function collectStringFields(value, path = "$", output = []) {
   return output;
 }
 
+function collectJsonRefs(value, path = "$", output = []) {
+  if (Array.isArray(value)) {
+    value.forEach((item, index) => collectJsonRefs(item, `${path}[${index}]`, output));
+    return output;
+  }
+  if (value && typeof value === "object") {
+    for (const [key, child] of Object.entries(value)) {
+      const childPath = `${path}.${key}`;
+      if (key === "$ref" && typeof child === "string") {
+        output.push({ path: childPath, value: child });
+      }
+      collectJsonRefs(child, childPath, output);
+    }
+  }
+  return output;
+}
+
 function stringifySchemaKeys(schema) {
   return collectStringFields(schema ?? {}, "inputSchema").map((item) => item.value).join(" ");
 }
@@ -376,6 +393,19 @@ function findSchemaReviewFindings(tool) {
   }
 
   const findings = [];
+  for (const ref of collectJsonRefs(schema, path)) {
+    const local = ref.value.startsWith("#/");
+    findings.push(
+      schemaFinding(
+        ref.path,
+        local ? "medium" : "high",
+        local ? "input_schema_local_ref" : "input_schema_external_ref",
+        local
+          ? "Tool inputSchema contains a local JSON Schema $ref. Some MCP clients and LLM tool adapters do not dereference local refs before argument generation."
+          : "Tool inputSchema contains an external JSON Schema $ref. Review whether clients can resolve it before relying on generated arguments."
+      )
+    );
+  }
   const properties = schema.properties && typeof schema.properties === "object" && !Array.isArray(schema.properties) ? schema.properties : null;
   const propertyNames = properties ? Object.keys(properties) : [];
   if ((schema.type === "object" || propertyNames.length > 0) && propertyNames.length === 0) {
@@ -468,7 +498,7 @@ function classify(normalized) {
     return {
       actionClass: "schema_review_signal",
       gate: "ask",
-      reason: "Tool inputSchema is missing, empty, or underspecified. Review metadata completeness before first invocation.",
+      reason: "Tool inputSchema is missing, empty, underspecified, or contains refs that may be degraded by MCP clients. Review metadata completeness before first invocation.",
     };
   }
 
@@ -705,7 +735,7 @@ function printMarkdown(matrix) {
     console.log("");
     console.log("## Schema Review Findings");
     console.log("");
-    console.log("These findings flag missing, empty, or underspecified `inputSchema` metadata that can break client-side review, validation, or argument generation.");
+    console.log("These findings flag missing, empty, underspecified, or `$ref`-based `inputSchema` metadata that can break client-side review, validation, or argument generation.");
     console.log("");
     console.log("| Tool | Path | Severity | Code | Review note |");
     console.log("| --- | --- | --- | --- | --- |");

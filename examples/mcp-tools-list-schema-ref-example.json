@@ -1,0 +1,33 @@
+{
+  "tools": [
+    {
+      "name": "create_page",
+      "description": "Create a page under a structured parent object.",
+      "inputSchema": {
+        "type": "object",
+        "$defs": {
+          "Parent": {
+            "type": "object",
+            "properties": {
+              "database_id": {
+                "type": "string",
+                "description": "Target database identifier."
+              }
+            },
+            "required": ["database_id"]
+          }
+        },
+        "properties": {
+          "parent": {
+            "$ref": "#/$defs/Parent"
+          },
+          "title": {
+            "type": "string",
+            "description": "Page title."
+          }
+        },
+        "required": ["parent", "title"]
+      }
+    }
+  ]
+}
