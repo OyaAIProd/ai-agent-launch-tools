@@ -185,6 +185,7 @@ function usage() {
     "  --file <path>          Read JSON from a file instead of stdin.",
     "  --baseline <path>      Compare against a prior JSON matrix snapshot.",
     "  --server <label>       Server label for the report.",
+    "  --codex-config         Print only a Codex config.toml review snippet.",
     "  --json                 Print structured JSON.",
     "  --markdown             Print Markdown. Default.",
     "  --help                 Show this help.",
@@ -445,6 +446,65 @@ function escapeCell(value) {
   return String(value).replace(/\|/g, "\\|").replace(/\n+/g, " ").trim();
 }
 
+function quoteTomlString(value) {
+  return JSON.stringify(String(value));
+}
+
+function codexApprovalMode(gate) {
+  if (gate === "allow") return "approve";
+  return "prompt";
+}
+
+function buildCodexConfig(matrix) {
+  const allowRows = matrix.rows.filter((row) => row.defaultGate === "allow");
+  const askRows = matrix.rows.filter((row) => row.defaultGate === "ask");
+  const denyRows = matrix.rows.filter((row) => row.defaultGate === "deny");
+  const allTools = matrix.rows.map((row) => row.tool);
+
+  const lines = [
+    "# Codex MCP approval review snippet",
+    `# Server label reviewed: ${matrix.server}`,
+    `# Reviewed tools/list snapshot: ${matrix.snapshotDigest}`,
+    "# Codex approval_mode values from the current schema: auto, prompt, approve.",
+    "# Keep sandbox/read-only settings separate from MCP tool approval.",
+    "",
+    `[mcp_servers.${quoteTomlString(matrix.server)}]`,
+    '# Add your reviewed transport here, for example command/args or url.',
+    'default_tools_approval_mode = "prompt"',
+  ];
+
+  if (allTools.length) {
+    lines.push(`enabled_tools = [${allTools.map(quoteTomlString).join(", ")}]`);
+  }
+  if (denyRows.length) {
+    lines.push(`disabled_tools = [${denyRows.map((row) => quoteTomlString(row.tool)).join(", ")}]`);
+  }
+
+  for (const row of [...allowRows, ...askRows]) {
+    lines.push("");
+    lines.push(`[mcp_servers.${quoteTomlString(matrix.server)}.tools.${quoteTomlString(row.tool)}]`);
+    lines.push(`approval_mode = ${quoteTomlString(codexApprovalMode(row.defaultGate))}`);
+    lines.push(`# ${row.policyKey} digest ${row.metadataDigest}: ${row.reason}`);
+  }
+
+  const reviewNotes = [
+    "Paste only after reviewing the transport, command/url, cwd, env boundary, and each tool's data boundary.",
+    "Deny is represented with disabled_tools because Codex tool approval modes are auto, prompt, and approve.",
+    "If the snapshot digest or any metadata digest changes, re-run review before inheriting prior approval.",
+    "This snippet does not disable Codex sandboxing and does not call MCP tools.",
+  ];
+
+  return {
+    server: matrix.server,
+    snapshotDigest: matrix.snapshotDigest,
+    allowTools: allowRows.map((row) => row.tool),
+    askTools: askRows.map((row) => row.tool),
+    disabledTools: denyRows.map((row) => row.tool),
+    toml: lines.join("\n"),
+    reviewNotes,
+  };
+}
+
 function printMarkdown(matrix) {
   console.log("# MCP Permission Matrix");
   console.log("");
@@ -482,6 +542,18 @@ function printMarkdown(matrix) {
   console.log("");
   console.log(matrix.launchRule);
   console.log("");
+  console.log("## Codex Config Review Snippet");
+  console.log("");
+  console.log("For Codex, `allow` maps to `approval_mode = \"approve\"`, `ask` maps to `approval_mode = \"prompt\"`, and `deny` maps to `disabled_tools`.");
+  console.log("");
+  console.log("```toml");
+  console.log(matrix.codexConfig.toml);
+  console.log("```");
+  console.log("");
+  for (const note of matrix.codexConfig.reviewNotes) {
+    console.log(`- ${note}`);
+  }
+  console.log("");
   console.log("## Safety");
   console.log("");
   console.log(matrix.safety);
@@ -496,8 +568,10 @@ function main() {
 
   const json = args.includes("--json");
   const markdown = args.includes("--markdown");
-  if (json && markdown) {
-    console.error("Error: use either --json or --markdown, not both.");
+  const codexConfigOnly = args.includes("--codex-config");
+  const outputModes = [json, markdown, codexConfigOnly].filter(Boolean).length;
+  if (outputModes > 1) {
+    console.error("Error: use only one output mode: --json, --markdown, or --codex-config.");
     return 1;
   }
 
@@ -520,12 +594,20 @@ function main() {
   try {
     matrix = buildMatrix({ tools: extractTools(parsed), server });
     matrix.baselineComparison = compareBaseline(matrix, baseline);
+    matrix.codexConfig = buildCodexConfig(matrix);
   } catch (error) {
     console.error(`Error: ${error instanceof Error ? error.message : String(error)}`);
     return 1;
   }
 
   if (json) console.log(JSON.stringify(matrix, null, 2));
+  else if (codexConfigOnly) {
+    console.log(matrix.codexConfig.toml);
+    console.log("");
+    for (const note of matrix.codexConfig.reviewNotes) {
+      console.log(`# ${note}`);
+    }
+  }
   else printMarkdown(matrix);
   return 0;
 }
