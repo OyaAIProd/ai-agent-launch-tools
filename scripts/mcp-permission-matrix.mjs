@@ -1,6 +1,7 @@
 #!/usr/bin/env node
 
 import fs from "node:fs";
+import crypto from "node:crypto";
 
 const GATES = {
   allow: {
@@ -182,6 +183,7 @@ function usage() {
     "",
     "Options:",
     "  --file <path>          Read JSON from a file instead of stdin.",
+    "  --baseline <path>      Compare against a prior JSON matrix snapshot.",
     "  --server <label>       Server label for the report.",
     "  --json                 Print structured JSON.",
     "  --markdown             Print Markdown. Default.",
@@ -223,6 +225,24 @@ function assertNoSensitiveInput(raw) {
   }
 }
 
+function stableStringify(value) {
+  if (Array.isArray(value)) {
+    return `[${value.map(stableStringify).join(",")}]`;
+  }
+  if (value && typeof value === "object") {
+    return `{${Object.keys(value).sort().map((key) => `${JSON.stringify(key)}:${stableStringify(value[key])}`).join(",")}}`;
+  }
+  return JSON.stringify(value);
+}
+
+function digest(value) {
+  return crypto.createHash("sha256").update(stableStringify(value)).digest("hex");
+}
+
+function shortDigest(value) {
+  return digest(value).slice(0, 12);
+}
+
 function extractTools(parsed) {
   if (Array.isArray(parsed)) return parsed;
   if (Array.isArray(parsed?.tools)) return parsed.tools;
@@ -245,6 +265,7 @@ function stringifySchemaKeys(schema) {
 function normalizeTool(tool, index) {
   const name = typeof tool?.name === "string" && tool.name.trim() ? tool.name.trim() : `tool_${index + 1}`;
   const description = typeof tool?.description === "string" ? tool.description.trim() : "";
+  const annotations = tool?.annotations && typeof tool.annotations === "object" ? tool.annotations : {};
   const schemaText = stringifySchemaKeys(tool?.inputSchema ?? tool?.input_schema ?? {});
   const metaText = [
     tool?._meta?.tool_configuration?.require_approval,
@@ -254,6 +275,14 @@ function normalizeTool(tool, index) {
   return {
     name,
     description,
+    annotations,
+    sourceDigest: shortDigest({
+      name,
+      description,
+      inputSchema: tool?.inputSchema ?? tool?.input_schema ?? null,
+      annotations,
+      toolConfiguration: tool?._meta?.tool_configuration ?? null,
+    }),
     searchable: `${name} ${description} ${schemaText} ${metaText}`.toLowerCase(),
   };
 }
@@ -301,9 +330,18 @@ function buildMatrix({ tools, server }) {
   const rows = tools.map((tool, index) => {
     const normalized = normalizeTool(tool, index);
     const classification = classify(normalized);
+    const policyKey = `${server}.${normalized.name}`.replace(/\s+/g, "_");
     return {
       tool: normalized.name,
+      policyKey,
+      metadataDigest: normalized.sourceDigest,
       description: normalized.description || "(no description)",
+      annotationHints: {
+        readOnlyHint: normalized.annotations.readOnlyHint ?? null,
+        destructiveHint: normalized.annotations.destructiveHint ?? null,
+        idempotentHint: normalized.annotations.idempotentHint ?? null,
+        openWorldHint: normalized.annotations.openWorldHint ?? null,
+      },
       actionClass: classification.actionClass,
       defaultGate: classification.gate,
       reason: classification.reason,
@@ -321,10 +359,85 @@ function buildMatrix({ tools, server }) {
     server,
     generatedBy: "ai-agent-launch-tools mcp-permission-matrix",
     toolCount: rows.length,
+    snapshotDigest: shortDigest({
+      server,
+      tools: rows.map((row) => ({
+        policyKey: row.policyKey,
+        metadataDigest: row.metadataDigest,
+        defaultGate: row.defaultGate,
+        actionClass: row.actionClass,
+      })),
+    }),
     totals,
     rows,
     launchRule: "New or changed MCP tools should default to ask or deny until their action class, data boundary, approval UI, receipt, and rollback path are reviewed.",
     safety: "Do not include secrets, customer records, private screenshots, payment data, OAuth tokens, cookies, API keys, card, bank, tax, payout, or full transaction identifiers in tools/list examples or reports.",
+  };
+}
+
+function readBaseline(file) {
+  if (!file) return null;
+  const raw = fs.readFileSync(file, "utf8");
+  assertNoSensitiveInput(raw);
+  const parsed = JSON.parse(raw);
+  const rows = Array.isArray(parsed?.rows) ? parsed.rows : Array.isArray(parsed) ? parsed : [];
+  if (!rows.length) {
+    throw new Error("Baseline file must be JSON output from this tool or an array of rows.");
+  }
+  return {
+    source: file,
+    snapshotDigest: parsed?.snapshotDigest ?? null,
+    rows,
+  };
+}
+
+function compareBaseline(matrix, baseline) {
+  if (!baseline) return null;
+  const before = new Map();
+  for (const row of baseline.rows) {
+    const key = row.policyKey || row.tool;
+    if (key) before.set(key, row);
+  }
+  const after = new Map(matrix.rows.map((row) => [row.policyKey || row.tool, row]));
+  const changes = [];
+
+  for (const [key, row] of after.entries()) {
+    const prior = before.get(key);
+    if (!prior) {
+      changes.push({ policyKey: key, change: "added", previousGate: null, currentGate: row.defaultGate, previousDigest: null, currentDigest: row.metadataDigest });
+      continue;
+    }
+    if ((prior.metadataDigest ?? "") !== row.metadataDigest || (prior.defaultGate ?? "") !== row.defaultGate) {
+      changes.push({
+        policyKey: key,
+        change: "changed",
+        previousGate: prior.defaultGate ?? null,
+        currentGate: row.defaultGate,
+        previousDigest: prior.metadataDigest ?? null,
+        currentDigest: row.metadataDigest,
+      });
+    }
+  }
+
+  for (const [key, row] of before.entries()) {
+    if (!after.has(key)) {
+      changes.push({ policyKey: key, change: "removed", previousGate: row.defaultGate ?? null, currentGate: null, previousDigest: row.metadataDigest ?? null, currentDigest: null });
+    }
+  }
+
+  const totals = changes.reduce((acc, item) => {
+    acc[item.change] = (acc[item.change] ?? 0) + 1;
+    return acc;
+  }, { added: 0, changed: 0, removed: 0 });
+
+  return {
+    baseline: baseline.source,
+    previousSnapshotDigest: baseline.snapshotDigest,
+    currentSnapshotDigest: matrix.snapshotDigest,
+    unchanged: matrix.rows.length - totals.added - totals.changed,
+    totals,
+    reviewRequired: changes.length > 0,
+    changes,
   };
 }
 
@@ -338,12 +451,31 @@ function printMarkdown(matrix) {
   console.log(`- Server: ${matrix.server}`);
   console.log(`- Tools reviewed: ${matrix.toolCount}`);
   console.log(`- Default gates: allow ${matrix.totals.allow}, ask ${matrix.totals.ask}, deny ${matrix.totals.deny}`);
+  console.log(`- Snapshot digest: ${matrix.snapshotDigest}`);
   console.log(`- Generated by: ${matrix.generatedBy}`);
   console.log("");
-  console.log("| Tool | Action class | Default gate | Reason | Evidence to keep |");
-  console.log("| --- | --- | --- | --- | --- |");
+  console.log("| Tool | Policy key | Digest | Action class | Default gate | Reason | Evidence to keep |");
+  console.log("| --- | --- | --- | --- | --- | --- | --- |");
   for (const row of matrix.rows) {
-    console.log(`| ${escapeCell(row.tool)} | ${escapeCell(row.actionClass)} | ${escapeCell(row.defaultGate)} | ${escapeCell(row.reason)} | ${escapeCell(row.evidence)} |`);
+    console.log(`| ${escapeCell(row.tool)} | ${escapeCell(row.policyKey)} | ${escapeCell(row.metadataDigest)} | ${escapeCell(row.actionClass)} | ${escapeCell(row.defaultGate)} | ${escapeCell(row.reason)} | ${escapeCell(row.evidence)} |`);
+  }
+  if (matrix.baselineComparison) {
+    console.log("");
+    console.log("## Snapshot Comparison");
+    console.log("");
+    console.log(`- Baseline: ${matrix.baselineComparison.baseline}`);
+    console.log(`- Previous snapshot: ${matrix.baselineComparison.previousSnapshotDigest ?? "(not recorded)"}`);
+    console.log(`- Current snapshot: ${matrix.baselineComparison.currentSnapshotDigest}`);
+    console.log(`- Changes: added ${matrix.baselineComparison.totals.added}, changed ${matrix.baselineComparison.totals.changed}, removed ${matrix.baselineComparison.totals.removed}`);
+    console.log(`- Review required: ${matrix.baselineComparison.reviewRequired ? "yes" : "no"}`);
+    if (matrix.baselineComparison.changes.length) {
+      console.log("");
+      console.log("| Policy key | Change | Previous gate | Current gate | Previous digest | Current digest |");
+      console.log("| --- | --- | --- | --- | --- | --- |");
+      for (const change of matrix.baselineComparison.changes) {
+        console.log(`| ${escapeCell(change.policyKey)} | ${escapeCell(change.change)} | ${escapeCell(change.previousGate ?? "")} | ${escapeCell(change.currentGate ?? "")} | ${escapeCell(change.previousDigest ?? "")} | ${escapeCell(change.currentDigest ?? "")} |`);
+      }
+    }
   }
   console.log("");
   console.log("## Launch Rule");
@@ -372,11 +504,13 @@ function main() {
   let raw;
   let parsed;
   let server;
+  let baseline;
   try {
     raw = readInput(args);
     assertNoSensitiveInput(raw);
     parsed = JSON.parse(raw);
     server = readOption(args, "--server", parsed?.server_label ?? parsed?.serverLabel ?? "candidate MCP server");
+    baseline = readBaseline(readOption(args, "--baseline", ""));
   } catch (error) {
     console.error(`Error: ${error instanceof Error ? error.message : String(error)}`);
     return 1;
@@ -385,6 +519,7 @@ function main() {
   let matrix;
   try {
     matrix = buildMatrix({ tools: extractTools(parsed), server });
+    matrix.baselineComparison = compareBaseline(matrix, baseline);
   } catch (error) {
     console.error(`Error: ${error instanceof Error ? error.message : String(error)}`);
     return 1;
