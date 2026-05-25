@@ -147,7 +147,11 @@ function reviewSql(raw) {
     add(findings, "medium", "search_path_empty_sql_inlining_review", "Empty search_path may need SQL-function inlining review", "For stable or immutable SQL functions that return sets, SET search_path can affect Postgres inlining and query plans. Keep the hardening decision, but require EXPLAIN evidence for the caller query and explicit schema-qualified references before treating the lint as fixed.");
   }
 
-  if ((hasSearchPathFromCurrent || hasNonEmptySearchPath) && (hasSecurityDefiner || hasSecurityAdvisorSearchPath)) {
+  if (hasSearchPathFromCurrent && (hasSecurityDefiner || hasSecurityAdvisorSearchPath)) {
+    add(findings, "medium", "search_path_from_current_review", "SET search_path FROM CURRENT needs captured-path evidence", "This can be intentionally hard-coded at function creation time, but the review packet should record the migration-time search_path and the resulting pg_proc.proconfig value so self-hosted/local advisor warnings can be distinguished from truly mutable functions.");
+  }
+
+  if (hasNonEmptySearchPath && (hasSecurityDefiner || hasSecurityAdvisorSearchPath)) {
     add(findings, "medium", "non_empty_search_path_review", "Non-empty search_path needs explicit justification", "A non-empty or inherited search_path may be intentional for extension operators, but it should be reviewed against Supabase Security Advisor guidance, exposed schemas, and caller-controlled object resolution risk.");
   }
 
