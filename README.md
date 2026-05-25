@@ -18,7 +18,7 @@ The repo also includes practical MCP/tool-call launch checklists:
 
 It now includes a small config reviewer and `tools/list` importer. The config reviewer turns a redacted Claude Desktop-style MCP config into a pre-install BLOCK / CAUTION / REVIEW report. The importer turns MCP tool metadata into an allow / ask / deny permission matrix with a snapshot digest for re-reviewing changed tools, without invoking any tools. It also recursively scans tool names, descriptions, and every string inside `inputSchema` for metadata/schema injection signals, including nested parameter descriptions, enum values, defaults, and titles. It flags schema-quality drift such as missing or empty `inputSchema`, object schemas without properties, missing `required` arrays, undocumented parameters, boolean/null/array property-schema entries, union `type` arrays that need target-client regression coverage, and JSON Schema `$ref` entries that some MCP clients or LLM tool adapters may not dereference before argument generation. It now also flags missing or incomplete `outputSchema` metadata for tools that appear to return structured data, so teams can review whether `structuredContent` can be validated and rendered reliably. It also flags missing or incomplete MCP `annotations` hints that clients can use for read-only, destructive, idempotent, and open-world approval prompts. It can also print a Codex `config.toml` review snippet that keeps sandbox settings separate from MCP tool approval.
 
-The repo also includes a Supabase RPC/view RLS audit CLI for redacted SQL/RPC/view notes. It checks local text only and flags public-schema definer functions, public views missing `security_invoker`, broad `EXECUTE` or `SELECT` grants, missing `search_path` hardening, and privileged functions or views that can bypass caller RLS expectations. Use `--fail-on high` in CI to block generated migrations that drop a launch-blocking view or RPC safety marker.
+The repo also includes a Supabase RPC/view RLS audit CLI for redacted SQL/RPC/view/Security Advisor notes. It checks local text only and flags public-schema definer functions, public views missing `security_invoker`, broad `EXECUTE` or `SELECT` grants, missing `search_path` hardening, `Function Search Path Mutable` review packets, SQL-function inlining tradeoffs, and privileged functions or views that can bypass caller RLS expectations. Use `--fail-on high` in CI to block generated migrations that drop a launch-blocking view or RPC safety marker.
 
 The public browser tools also include Supabase launch checks for teams pairing AI agents with Supabase. Use them to review redacted Data API grants, anonymous sign-in RLS boundaries, Security Definer RPCs, exposed views, and project-scoped Supabase MCP branching before an agent applies migrations or touches production data.
 
@@ -59,13 +59,13 @@ npx --package github:kayalopez/ai-agent-launch-tools#v0.1.15 mcp-trust-check --s
 Review redacted Supabase SQL/RPC/view notes for Security Definer and security-invoker risk:
 
 ```bash
-npx --package github:kayalopez/ai-agent-launch-tools#v0.1.18 supabase-rpc-audit --file supabase_rpc.redacted.sql
+npx --package github:kayalopez/ai-agent-launch-tools#v0.1.19 supabase-rpc-audit --file supabase_rpc.redacted.sql
 ```
 
 Fail CI on high-severity migration drift:
 
 ```bash
-npx --package github:kayalopez/ai-agent-launch-tools#v0.1.18 supabase-rpc-audit --file supabase_migration.redacted.sql --fail-on high
+npx --package github:kayalopez/ai-agent-launch-tools#v0.1.19 supabase-rpc-audit --file supabase_migration.redacted.sql --fail-on high
 ```
 
 Try the included Supabase RPC example after cloning:
@@ -83,7 +83,13 @@ node scripts/supabase-rpc-audit.mjs --file examples/supabase-security-invoker-vi
 JSON output:
 
 ```bash
-npx --package github:kayalopez/ai-agent-launch-tools#v0.1.18 supabase-rpc-audit --file supabase_rpc.redacted.sql --json
+npx --package github:kayalopez/ai-agent-launch-tools#v0.1.19 supabase-rpc-audit --file supabase_rpc.redacted.sql --json
+```
+
+Review a redacted Supabase Security Advisor `Function Search Path Mutable` tradeoff packet:
+
+```bash
+node scripts/supabase-rpc-audit.mjs --file examples/supabase-function-search-path-inline.sql
 ```
 
 Review a redacted MCP client config before installing or approving servers:

@@ -14,7 +14,7 @@ function usage() {
   return [
     "Usage: supabase-rpc-audit [options]",
     "",
-    "Reads redacted Supabase SQL/RPC/view notes and prints an RLS bypass risk report.",
+    "Reads redacted Supabase SQL/RPC/view/Security Advisor notes and prints an RLS bypass risk report.",
     "",
     "Options:",
     "  --file <path>          Read SQL/notes from a file instead of stdin.",
@@ -89,11 +89,19 @@ function reviewSql(raw) {
   const findings = [];
   const hasInput = raw.trim().length > 0;
   const sql = stripSqlComments(raw);
+  const hasCreateFunction = /create(?:\s+or\s+replace)?\s+function\s+[\w".]+\s*\(/i.test(sql);
+  const hasSecurityAdvisorSearchPath = /function\s+search\s+path\s+mutable|0011_function_search_path_mutable/i.test(raw);
   const hasSecurityDefiner = /security\s+definer/i.test(sql);
   const exposedSchemaFunction = /create(?:\s+or\s+replace)?\s+function\s+public\./i.test(sql);
   const exposedSchemaView = /create(?:\s+or\s+replace)?\s+view\s+public\./i.test(sql);
   const hasSecurityInvokerView = /security_invoker\s*=\s*(?:true|on)/i.test(sql);
   const hasSetSearchPath = /set\s+search_path\s*=/i.test(sql);
+  const hasEmptySearchPath = /set\s+search_path\s*=\s*(?:''|""|\(\s*''\s*\))/i.test(sql);
+  const hasSearchPathFromCurrent = /set\s+search_path\s+from\s+current/i.test(sql);
+  const hasNonEmptySearchPath = /set\s+search_path\s*=\s*(?!\s*(?:''|""|\(\s*''\s*\)))/i.test(sql);
+  const hasSqlLanguage = /language\s+sql\b/i.test(sql);
+  const hasStableOrImmutable = /\b(?:stable|immutable)\b/i.test(sql);
+  const returnsSet = /returns\s+(?:setof|table\b)/i.test(sql);
   const grantExecuteBroad = /grant\s+execute[\s\S]{0,220}\bto\s+(?:public|anon|authenticated)\b/i.test(sql);
   const grantSelectBroad = /grant\s+select[\s\S]{0,220}\bto\s+(?:public|anon|authenticated)\b/i.test(sql);
   const revokeExecute = /revoke\s+execute[\s\S]{0,220}\bfrom\s+(?:public|anon|authenticated)\b/i.test(sql);
@@ -101,7 +109,7 @@ function reviewSql(raw) {
   const hasIdentityCheck = /auth\.uid\s*\(|auth\.jwt\s*\(|current_setting\s*\(\s*'request\.jwt|request\.jwt|is_admin|membership/i.test(sql);
   const usingTrue = /using\s*\(\s*true\s*\)|with\s+check\s*\(\s*true\s*\)/i.test(sql);
   const serviceRole = /service_role|bypassrls|bypass\s+rls/i.test(sql);
-  const rpcMention = /rpc\(|remote procedure|function\s+public\.|create\s+function/i.test(sql);
+  const rpcMention = /rpc\(|remote procedure|function\s+public\.|create\s+(?:or\s+replace\s+)?function/i.test(sql);
   const viewMention = /view\s+public\.|create\s+(?:or\s+replace\s+)?view/i.test(sql);
 
   if (!hasInput) {
@@ -129,6 +137,18 @@ function reviewSql(raw) {
 
   if (hasSecurityDefiner && !hasSetSearchPath) {
     add(findings, "medium", "security_definer_search_path_missing", "SECURITY DEFINER function lacks visible search_path hardening", "Set a narrow search_path so the function does not resolve caller-controlled objects or unexpected public objects.");
+  }
+
+  if ((hasCreateFunction || hasSecurityAdvisorSearchPath) && !hasSetSearchPath) {
+    add(findings, "medium", "function_search_path_mutable_lint", "Function Search Path Mutable warning likely applies", "Supabase Security Advisor flags functions without an explicit search_path. Add a review note before launch: either pin search_path and fully qualify object references, or document why this function needs a different remediation with tests.");
+  }
+
+  if (hasSqlLanguage && hasStableOrImmutable && returnsSet && hasEmptySearchPath) {
+    add(findings, "medium", "search_path_empty_sql_inlining_review", "Empty search_path may need SQL-function inlining review", "For stable or immutable SQL functions that return sets, SET search_path can affect Postgres inlining and query plans. Keep the hardening decision, but require EXPLAIN evidence for the caller query and explicit schema-qualified references before treating the lint as fixed.");
+  }
+
+  if ((hasSearchPathFromCurrent || hasNonEmptySearchPath) && (hasSecurityDefiner || hasSecurityAdvisorSearchPath)) {
+    add(findings, "medium", "non_empty_search_path_review", "Non-empty search_path needs explicit justification", "A non-empty or inherited search_path may be intentional for extension operators, but it should be reviewed against Supabase Security Advisor guidance, exposed schemas, and caller-controlled object resolution risk.");
   }
 
   if (grantExecuteBroad) {
@@ -187,6 +207,7 @@ function buildReport({ label, raw, failOn }) {
     findings,
     nextSteps: [
       "Review SECURITY DEFINER functions before launch; they can bypass table RLS.",
+      "For Function Search Path Mutable warnings, document the chosen remediation and keep EXPLAIN evidence if performance or SQL-function inlining matters.",
       "For public views that should obey underlying table RLS, preserve WITH (security_invoker = true) and test anon/authenticated calls.",
       "Keep broad EXECUTE grants off public/anon roles unless the RPC is intentionally public.",
       "Add caller-bound auth.uid/auth.jwt/membership checks inside privileged functions that touch tenant, user, billing, admin, or profile data.",
