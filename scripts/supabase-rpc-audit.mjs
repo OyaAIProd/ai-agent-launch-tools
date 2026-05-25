@@ -105,6 +105,12 @@ function reviewSql(raw) {
   const grantExecuteBroad = /grant\s+execute[\s\S]{0,220}\bto\s+(?:public|anon|authenticated)\b/i.test(sql);
   const grantSelectBroad = /grant\s+select[\s\S]{0,220}\bto\s+(?:public|anon|authenticated)\b/i.test(sql);
   const revokeExecute = /revoke\s+execute[\s\S]{0,220}\bfrom\s+(?:public|anon|authenticated)\b/i.test(sql);
+  const defaultPrivilegesRevokeExecute = /alter\s+default\s+privileges[\s\S]{0,320}revoke\s+execute[\s\S]{0,220}\bfrom\s+(?:public|anon|authenticated|service_role)\b/i.test(sql);
+  const publicExecuteAcl = /\bproacl\b[\s\S]{0,160}\{[^}]*=X\//i.test(raw) || /\{[^}]*=X\/[^}]*\}/i.test(raw);
+  const browserRoleExecuteAcl = /\bproacl\b[\s\S]{0,180}\b(?:anon|authenticated)=X\//i.test(raw) || /\b(?:anon|authenticated)=X\//i.test(raw);
+  const rpcRestSmoke = /\bPOST\s+\/rest\/v\d+\/rpc\/[A-Za-z0-9_".-]+/i.test(raw);
+  const anonRpcSmokeSuccess = rpcRestSmoke && /\b(?:anon|anonymous|publishable)\b[\s\S]{0,220}\b(?:200|201|success|succeeds|executes|executed|callable)\b/i.test(raw);
+  const executeUnexpectedLanguage = /\b(?:still|unexpectedly|even though|without explicit grant|no explicit grant)[\s\S]{0,180}\b(?:executable|execute|executes|callable|success|succeeds)\b/i.test(raw);
   const touchesSensitiveTables = /\b(?:profiles|users|sessions|team|teams|tenant|organization|memberships|invites|billing|payments|orders|customers|admin|roles)\b/i.test(sql);
   const hasIdentityCheck = /auth\.uid\s*\(|auth\.jwt\s*\(|current_setting\s*\(\s*'request\.jwt|request\.jwt|is_admin|membership/i.test(sql);
   const usingTrue = /using\s*\(\s*true\s*\)|with\s+check\s*\(\s*true\s*\)/i.test(sql);
@@ -157,6 +163,12 @@ function reviewSql(raw) {
 
   if (grantExecuteBroad) {
     add(findings, "high", "broad_execute_grant", "Broad EXECUTE grant found", "Revoke broad function execution first, then grant only the exact role that should call the RPC. Treat anon execution as a launch blocker unless it is intentionally public.");
+  } else if (defaultPrivilegesRevokeExecute && (publicExecuteAcl || browserRoleExecuteAcl || anonRpcSmokeSuccess || executeUnexpectedLanguage)) {
+    add(findings, "high", "default_execute_revoke_not_enforced", "Default EXECUTE revoke appears contradicted by callable-function evidence", "The packet shows default EXECUTE revocation plus ACL, REST/RPC, or narrative evidence that the function is still callable. Add a function-specific REVOKE after creation and keep an anon/authenticated deny smoke test.");
+  } else if (browserRoleExecuteAcl || anonRpcSmokeSuccess) {
+    add(findings, "high", "browser_role_rpc_execute_evidence", "Browser-facing role can execute an RPC", "Treat anon/authenticated RPC execution as intentional only if the function is public by design. Otherwise add function-specific REVOKE lines and a deny regression test.");
+  } else if (publicExecuteAcl && rpcMention) {
+    add(findings, "medium", "public_execute_acl_review", "Function ACL includes public EXECUTE marker", "A proacl entry such as =X means PUBLIC has EXECUTE. Confirm whether this RPC should be callable by browser-facing roles and add explicit revoke/grant evidence.");
   } else if (rpcMention && !revokeExecute) {
     add(findings, "medium", "execute_privilege_evidence_missing", "EXECUTE privilege evidence missing", "Include revoke/grant lines in the review packet so callable roles are explicit.");
   }
