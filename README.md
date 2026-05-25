@@ -22,6 +22,10 @@ The repo also includes a Supabase RPC/view RLS audit CLI for redacted SQL/RPC/vi
 
 The public browser tools also include Supabase launch checks for teams pairing AI agents with Supabase. Use them to review redacted Data API grants, anonymous sign-in RLS boundaries, Security Definer RPCs, `security_invoker` view drift, exposed views, Security Advisor `search_path` warnings, auth signup trigger failures, and project-scoped Supabase MCP branching before an agent applies migrations or touches production data.
 
+For a focused paid handoff, the Supabase Launch Risk Report page explains the one-packet `$25` scope and links the free triage tools plus sample report before checkout:
+
+https://ai-launch-risk-check-public.vercel.app/supabase-launch-risk-report.html
+
 Need the full launch workflow? The $25 AI Agent Launch Pack includes the local app, safe-intake builder, checklist, templates, sample report, and optional fixed-scope 24-hour review path:
 
 https://ai-launch-risk-check-public.vercel.app/
@@ -225,6 +229,7 @@ These no-login tools are live:
 - MCP tool approval criteria generator: https://ai-launch-risk-check-public.vercel.app/mcp-tool-approval-criteria.html
 - MCP trust verification generator: https://ai-launch-risk-check-public.vercel.app/mcp-trust-verification-generator.html
 - Agent API key bootstrap checklist: https://ai-launch-risk-check-public.vercel.app/agent-api-key-bootstrap-checklist.html
+- Supabase Launch Risk Report: https://ai-launch-risk-check-public.vercel.app/supabase-launch-risk-report.html
 - Supabase API grants readiness checker: https://ai-launch-risk-check-public.vercel.app/supabase-api-grants-readiness.html
 - Supabase anonymous RLS audit matrix: https://ai-launch-risk-check-public.vercel.app/supabase-anonymous-rls-audit.html
 - Supabase Security Definer RPC audit: https://ai-launch-risk-check-public.vercel.app/supabase-security-definer-rpc-audit.html
