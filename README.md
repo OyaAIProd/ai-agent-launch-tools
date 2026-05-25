@@ -20,7 +20,7 @@ It now includes a small config reviewer and `tools/list` importer. The config re
 
 The repo also includes a Supabase RPC/view RLS audit CLI for redacted SQL/RPC/view/Security Advisor notes. It checks local text only and flags public-schema definer functions, public views missing `security_invoker`, broad `EXECUTE` or `SELECT` grants, missing `search_path` hardening, `Function Search Path Mutable` review packets, SQL-function inlining tradeoffs, `SET search_path FROM CURRENT` evidence needs, and privileged functions or views that can bypass caller RLS expectations. Use `--fail-on high` in CI to block generated migrations that drop a launch-blocking view or RPC safety marker.
 
-The public browser tools also include Supabase launch checks for teams pairing AI agents with Supabase. Use them to review redacted Data API grants, anonymous sign-in RLS boundaries, Security Definer RPCs, exposed views, and project-scoped Supabase MCP branching before an agent applies migrations or touches production data.
+The public browser tools also include Supabase launch checks for teams pairing AI agents with Supabase. Use them to review redacted Data API grants, anonymous sign-in RLS boundaries, Security Definer RPCs, exposed views, Security Advisor `search_path` warnings, auth signup trigger failures, and project-scoped Supabase MCP branching before an agent applies migrations or touches production data.
 
 Need the full launch workflow? The $25 AI Agent Launch Pack includes the local app, safe-intake builder, checklist, templates, sample report, and optional fixed-scope 24-hour review path:
 
@@ -229,6 +229,8 @@ These no-login tools are live:
 - Supabase anonymous RLS audit matrix: https://ai-launch-risk-check-public.vercel.app/supabase-anonymous-rls-audit.html
 - Supabase Security Definer RPC audit: https://ai-launch-risk-check-public.vercel.app/supabase-security-definer-rpc-audit.html
 - Supabase MCP branching readiness checker: https://ai-launch-risk-check-public.vercel.app/supabase-mcp-branching-readiness.html
+- Supabase Security Advisor fix planner: https://ai-launch-risk-check-public.vercel.app/supabase-security-advisor-fix-planner.html
+- Supabase signup trigger debugger: https://ai-launch-risk-check-public.vercel.app/supabase-signup-trigger-debugger.html
 - Sample Supabase grants/RLS report: https://ai-launch-risk-check-public.vercel.app/sample-supabase-grants-rls-report.md
 
 The full paid pack and fixed-scope review are described on the product page:
